@@ -114,7 +114,7 @@ public class DataConverter
 				totalRecordCount = count.getInt(1);
 		}
 		int recordCount = 0;
-		log.info("Records to be copied: " + totalRecordCount);
+		log.info(tableSpec + ": Records to be copied: " + totalRecordCount);
 
 		while (true)
 		{
@@ -139,12 +139,12 @@ public class DataConverter
 				}
 			}
 			destination.commit();
-			log.info("Records copied so far: " + recordCount + " of " + totalRecordCount);
+			log.info(tableSpec + ": Records copied so far: " + recordCount + " of " + totalRecordCount);
 			currentOffset = currentOffset + batchSize;
 			if (recordCount >= totalRecordCount)
 				break;
 		}
-		log.info("Finished copying: " + recordCount + " of " + totalRecordCount);
+		log.info(tableSpec + ": Finished copying: " + recordCount + " of " + totalRecordCount);
 	}
 
 	private Columns getColumns(String catalog, String schema, String table) throws SQLException
