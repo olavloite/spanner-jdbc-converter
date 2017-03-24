@@ -1,0 +1,7 @@
+
+#Table converter properties
+TableConverter.convertMode=SkipExisting
+TableConverter.specificColumnMapping.uuid=BYTES(16)
+
+#Data converter properties
+DataConverter.convertMode=SkipExisting

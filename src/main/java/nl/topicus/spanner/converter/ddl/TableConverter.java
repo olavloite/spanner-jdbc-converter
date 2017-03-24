@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.logging.Logger;
 
 import nl.topicus.spanner.converter.ConvertMode;
+import nl.topicus.spanner.converter.cfg.ConverterConfiguration;
 
 public class TableConverter
 {
@@ -27,7 +28,7 @@ public class TableConverter
 
 	private final Map<String, String> specificColumnMapping = new HashMap<>();
 
-	private final ConvertMode createMode;
+	private final ConverterConfiguration config;
 
 	private int defaultSizeBytes = 1000000;
 
@@ -37,11 +38,17 @@ public class TableConverter
 
 	private int maxSizeColumn = 1000000;
 
-	public TableConverter(Connection source, Connection destination, ConvertMode createMode)
+	public TableConverter(Connection source, Connection destination, ConverterConfiguration config)
 	{
 		this.source = source;
 		this.destination = destination;
-		this.createMode = createMode;
+		this.config = config;
+		registerDefaultColumnTypes();
+		registerConfiguredColumnMappings();
+	}
+
+	private void registerDefaultColumnTypes()
+	{
 		registerColumnType(Types.BOOLEAN, "BOOL");
 		registerColumnType(Types.BIT, "BOOL");
 		registerColumnType(Types.BIGINT, "INT64");
@@ -63,6 +70,16 @@ public class TableConverter
 		registerColumnType(Types.CLOB, "STRING($1)");
 		registerColumnType(Types.BLOB, "BYTES($1)");
 		registerColumnType(Types.NUMERIC, "FLOAT64");
+	}
+
+	private void registerConfiguredColumnMappings()
+	{
+		Map<String, String> mappings = config.getSpecificColumnMappings();
+		for (String col : mappings.keySet())
+		{
+			String dataType = mappings.get(col);
+			registerSpecificColumnMapping(col, dataType);
+		}
 	}
 
 	public void registerColumnType(Integer sqlType, String cloudSpannerType)
@@ -96,6 +113,12 @@ public class TableConverter
 			while (tables.next())
 			{
 				boolean exists = existingTables.contains(tables.getString("TABLE_NAME").toUpperCase());
+				if (exists && config.getTableConvertMode() == ConvertMode.DropAndRecreate)
+				{
+					log.info("Table " + tables.getString("TABLE_NAME") + " already exists. Dropping table");
+					dropTable(tables.getString("TABLE_NAME"));
+					log.info(tables.getString("TABLE_NAME") + " dropped");
+				}
 				String definition = getTableDefinition(tables, exists);
 				if (definition != null)
 				{
@@ -125,12 +148,11 @@ public class TableConverter
 		String catalog = tables.getString("TABLE_CAT");
 		String schema = tables.getString("TABLE_SCHEM");
 		String table = tables.getString("TABLE_NAME");
+		ConvertMode createMode = config.getTableConvertMode();
 		if (exists)
 		{
 			if (createMode == ConvertMode.SkipExisting)
 				return null;
-			if (createMode == ConvertMode.DropAndRecreate)
-				dropTable(table);
 			if (createMode == ConvertMode.ThrowExceptionIfExists)
 				throw new IllegalStateException("Table " + table + " already exists");
 		}

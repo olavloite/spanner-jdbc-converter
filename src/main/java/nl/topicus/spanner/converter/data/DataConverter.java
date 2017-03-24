@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.logging.Logger;
 
 import nl.topicus.spanner.converter.ConvertMode;
+import nl.topicus.spanner.converter.cfg.ConverterConfiguration;
 
 public class DataConverter
 {
@@ -19,7 +20,7 @@ public class DataConverter
 
 	private final Connection destination;
 
-	private final ConvertMode convertMode;
+	private final ConverterConfiguration config;
 
 	private int batchSize = 1000;
 
@@ -53,11 +54,11 @@ public class DataConverter
 		}
 	}
 
-	public DataConverter(Connection source, Connection destination, ConvertMode convertMode)
+	public DataConverter(Connection source, Connection destination, ConverterConfiguration config)
 	{
 		this.source = source;
 		this.destination = destination;
-		this.convertMode = convertMode;
+		this.config = config;
 	}
 
 	public void convert(String catalog, String schema) throws SQLException
@@ -70,16 +71,20 @@ public class DataConverter
 				String table = tables.getString("TABLE_NAME");
 				// Check whether the destination table is empty.
 				boolean empty = isDestinationTableEmpty(table);
-				// TODO delete all records if not empty
-				if (empty)
+				if (empty || config.getDataConvertMode() == ConvertMode.DropAndRecreate)
 				{
+					// TODO delete all records if not empty
+					if (!empty)
+					{
+
+					}
 					convertTable(catalog, schema, table);
 				}
 				else
 				{
-					if (convertMode == ConvertMode.ThrowExceptionIfExists)
+					if (config.getDataConvertMode() == ConvertMode.ThrowExceptionIfExists)
 						throw new IllegalStateException("Table " + table + " is not empty");
-					else if (convertMode == ConvertMode.SkipExisting)
+					else if (config.getDataConvertMode() == ConvertMode.SkipExisting)
 						log.info("Skipping data copy for table " + table);
 				}
 			}
