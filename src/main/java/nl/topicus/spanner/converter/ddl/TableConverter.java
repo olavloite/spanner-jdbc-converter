@@ -212,9 +212,10 @@ public class TableConverter
 		return defaultSizeOther;
 	}
 
-	private void dropTable(String table)
+	private void dropTable(String table) throws SQLException
 	{
-
+		String sql = "DROP TABLE " + table;
+		destination.createStatement().executeUpdate(sql);
 	}
 
 }
