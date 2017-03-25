@@ -73,10 +73,9 @@ public class DataConverter
 				boolean empty = isDestinationTableEmpty(table);
 				if (empty || config.getDataConvertMode() == ConvertMode.DropAndRecreate)
 				{
-					// TODO delete all records if not empty
 					if (!empty)
 					{
-
+						deleteAll(table);
 					}
 					convertTable(catalog, schema, table);
 				}
@@ -182,6 +181,15 @@ public class DataConverter
 				return rs.getInt(1) == 0;
 		}
 		return false;
+	}
+
+	private void deleteAll(String table) throws SQLException
+	{
+		log.info("Deleting all existing records from " + table);
+		String sql = "delete from " + table;
+		destination.createStatement().executeUpdate(sql);
+		destination.commit();
+		log.info("Delete done on " + table);
 	}
 
 	public int getBatchSize()
