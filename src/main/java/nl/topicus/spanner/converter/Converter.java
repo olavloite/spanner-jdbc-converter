@@ -26,7 +26,7 @@ public class Converter
 			String configFile = args[2];
 			try
 			{
-				config = new ConverterConfiguration(Paths.get(configFile).toUri());
+				config = new ConverterConfiguration(urlSource, urlDestination, Paths.get(configFile).toUri());
 			}
 			catch (IOException e)
 			{
@@ -36,7 +36,7 @@ public class Converter
 		}
 		else
 		{
-			config = new ConverterConfiguration();
+			config = new ConverterConfiguration(urlSource, urlDestination);
 		}
 
 		if (config.getTableConvertMode() == ConvertMode.DropAndRecreate)

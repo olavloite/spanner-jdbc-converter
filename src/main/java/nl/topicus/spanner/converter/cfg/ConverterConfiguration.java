@@ -12,17 +12,23 @@ import nl.topicus.spanner.converter.ConvertMode;
 
 public class ConverterConfiguration
 {
-	private Properties properties = new Properties();
+	private final Properties properties = new Properties();
 
 	private ConvertMode tableConvertMode;
 
 	private ConvertMode dataConvertMode;
 
+	private final String urlSource;
+
+	private final String urlDestination;
+
 	/**
 	 * Create a default converter configuration
 	 */
-	public ConverterConfiguration()
+	public ConverterConfiguration(String urlSource, String urlDestination)
 	{
+		this.urlSource = urlSource;
+		this.urlDestination = urlDestination;
 		tableConvertMode = ConvertMode.SkipExisting;
 		dataConvertMode = ConvertMode.SkipExisting;
 	}
@@ -30,8 +36,10 @@ public class ConverterConfiguration
 	/**
 	 * Create a converter configuration from a properties file
 	 */
-	public ConverterConfiguration(URI file) throws IOException
+	public ConverterConfiguration(String urlSource, String urlDestination, URI file) throws IOException
 	{
+		this.urlSource = urlSource;
+		this.urlDestination = urlDestination;
 		properties.load(Files.newBufferedReader(Paths.get(file)));
 	}
 
@@ -69,6 +77,16 @@ public class ConverterConfiguration
 		}
 
 		return res;
+	}
+
+	public String getUrlSource()
+	{
+		return urlSource;
+	}
+
+	public String getUrlDestination()
+	{
+		return urlDestination;
 	}
 
 }

@@ -7,6 +7,9 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 import nl.topicus.spanner.converter.ConvertMode;
@@ -24,29 +27,31 @@ public class DataConverter
 
 	private int batchSize = 1000;
 
+	private int numberOfWorkers = 10;
+
 	private boolean runInAutoCommit = false;
 
 	private String selectFormat = "SELECT $COLUMNS FROM $TABLE ORDER BY $PRIMARY_KEY LIMIT $BATCH_SIZE OFFSET $OFFSET";
 
-	private static final class Columns
+	static final class Columns
 	{
-		private List<String> columnNames = new ArrayList<>();
+		List<String> columnNames = new ArrayList<>();
 
-		private List<Integer> columnTypes = new ArrayList<>();
+		List<Integer> columnTypes = new ArrayList<>();
 
-		private List<String> primaryKeyCols = new ArrayList<>();
+		List<String> primaryKeyCols = new ArrayList<>();
 
-		private String getColumnNames()
+		String getColumnNames()
 		{
 			return String.join(", ", columnNames);
 		}
 
-		private String getPrimaryKeyColumns()
+		String getPrimaryKeyColumns()
 		{
 			return String.join(", ", primaryKeyCols);
 		}
 
-		private String getColumnParameters()
+		String getColumnParameters()
 		{
 			String[] params = new String[columnNames.size()];
 			Arrays.fill(params, "?");
@@ -70,14 +75,22 @@ public class DataConverter
 			{
 				String table = tables.getString("TABLE_NAME");
 				// Check whether the destination table is empty.
-				boolean empty = isDestinationTableEmpty(table);
-				if (empty || config.getDataConvertMode() == ConvertMode.DropAndRecreate)
+				int destinationRecordCount = getDestinationRecordCount(table);
+				if (destinationRecordCount == 0 || config.getDataConvertMode() == ConvertMode.DropAndRecreate)
 				{
-					if (!empty)
+					if (destinationRecordCount > 0)
 					{
 						deleteAll(table);
 					}
-					convertTable(catalog, schema, table);
+					int sourceRecordCount = getSourceRecordCount(getTableSpec(catalog, schema, table));
+					if (sourceRecordCount > batchSize)
+					{
+						convertTableWithWorkers(catalog, schema, table);
+					}
+					else
+					{
+						convertTable(catalog, schema, table);
+					}
 				}
 				else
 				{
@@ -151,6 +164,45 @@ public class DataConverter
 		log.info(tableSpec + ": Finished copying: " + recordCount + " of " + totalRecordCount);
 	}
 
+	private void convertTableWithWorkers(String catalog, String schema, String table) throws SQLException
+	{
+		String tableSpec = getTableSpec(catalog, schema, table);
+		Columns cols = getColumns(catalog, schema, table);
+		if (cols.primaryKeyCols.isEmpty())
+		{
+			log.warning("Table " + tableSpec + " does not have a primary key. No data will be copied.");
+			return;
+		}
+		log.info("About to copy data from table " + tableSpec);
+
+		int totalRecordCount = getSourceRecordCount(tableSpec);
+		int numberOfRecordsPerWorker = totalRecordCount / numberOfWorkers;
+		if (totalRecordCount % numberOfWorkers > 0)
+			numberOfRecordsPerWorker++;
+		int currentOffset = 0;
+		ExecutorService service = Executors.newFixedThreadPool(numberOfWorkers);
+		for (int workerNumber = 0; workerNumber < numberOfWorkers; workerNumber++)
+		{
+			int workerRecordCount = Math.min(numberOfRecordsPerWorker, totalRecordCount - currentOffset);
+			UploadWorker worker = new UploadWorker("UploadWorker-" + workerNumber, selectFormat, tableSpec, table,
+					cols, currentOffset, workerRecordCount, batchSize, config.getUrlSource(),
+					config.getUrlDestination());
+			service.submit(worker);
+			currentOffset = currentOffset + numberOfRecordsPerWorker;
+		}
+		service.shutdown();
+		try
+		{
+			service.awaitTermination(6, TimeUnit.HOURS);
+		}
+		catch (InterruptedException e)
+		{
+			log.severe("Error while waiting for workers to finish: " + e.getMessage());
+			throw new RuntimeException(e);
+		}
+
+	}
+
 	private Columns getColumns(String catalog, String schema, String table) throws SQLException
 	{
 		Columns res = new Columns();
@@ -172,15 +224,37 @@ public class DataConverter
 		return res;
 	}
 
-	private boolean isDestinationTableEmpty(String table) throws SQLException
+	private String getTableSpec(String catalog, String schema, String table)
+	{
+		String tableSpec = "";
+		if (catalog != null && !"".equals(catalog))
+			tableSpec = tableSpec + catalog + ".";
+		if (schema != null && !"".equals(schema))
+			tableSpec = tableSpec + schema + ".";
+		tableSpec = tableSpec + table;
+
+		return tableSpec;
+	}
+
+	private int getSourceRecordCount(String tableSpec) throws SQLException
+	{
+		try (ResultSet count = source.createStatement().executeQuery("SELECT COUNT(*) FROM " + tableSpec))
+		{
+			if (count.next())
+				return count.getInt(1);
+		}
+		return 0;
+	}
+
+	private int getDestinationRecordCount(String table) throws SQLException
 	{
 		String sql = "select count(*) from " + table;
 		try (ResultSet rs = destination.createStatement().executeQuery(sql))
 		{
 			if (rs.next())
-				return rs.getInt(1) == 0;
+				return rs.getInt(1);
 		}
-		return false;
+		return 0;
 	}
 
 	private void deleteAll(String table) throws SQLException
