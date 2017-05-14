@@ -2,6 +2,8 @@
 A generic tool for converting JDBC-compliant databases to Google Cloud Spanner. The converter will convert both your data model and data to Google Cloud Spanner.
 It has currently only been tested with PostgreSQL source databases. More will be added later.
 
+A short tutorial on this project can be found here: https://olavloite.github.io/2017/05/06/Bulk-Upload-in-Google-Cloudspanner.html
+
 ## How it works
 The tool does the conversion in these stages:<br>
 1. Copy the definition of all tables from the source database to Google Cloud Spanner. The tool uses a generic mapping for column data types. The generic mapping can be configured to suit your specific needs. Only tables with a primary key can be converted. <br>
