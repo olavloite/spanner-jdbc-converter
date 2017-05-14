@@ -254,6 +254,10 @@ public class DataConverter
 			if (rs.next())
 				return rs.getInt(1);
 		}
+		finally
+		{
+			destination.commit();
+		}
 		return 0;
 	}
 
