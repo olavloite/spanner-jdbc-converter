@@ -31,6 +31,13 @@ public class DataConverter
 
 	private boolean runInAutoCommit = false;
 
+	/**
+	 * Use JDBC batching yes/no? (Added for testing purposes) Turning on
+	 * batching does not speed up the process, as the underlying Google Cloud
+	 * Spanner framework already batches transactions.
+	 */
+	private boolean useJdbcBatching = true;
+
 	private String selectFormat = "SELECT $COLUMNS FROM $TABLE ORDER BY $PRIMARY_KEY LIMIT $BATCH_SIZE OFFSET $OFFSET";
 
 	static final class Columns
@@ -151,9 +158,14 @@ public class DataConverter
 						statement.setObject(index, object, type);
 						index++;
 					}
-					statement.executeUpdate();
+					if (useJdbcBatching)
+						statement.addBatch();
+					else
+						statement.executeUpdate();
 					recordCount++;
 				}
+				if (useJdbcBatching)
+					statement.executeBatch();
 			}
 			destination.commit();
 			log.info(tableSpec + ": Records copied so far: " + recordCount + " of " + totalRecordCount);
@@ -186,7 +198,7 @@ public class DataConverter
 			int workerRecordCount = Math.min(numberOfRecordsPerWorker, totalRecordCount - currentOffset);
 			UploadWorker worker = new UploadWorker("UploadWorker-" + workerNumber, selectFormat, tableSpec, table,
 					cols, currentOffset, workerRecordCount, batchSize, config.getUrlSource(),
-					config.getUrlDestination());
+					config.getUrlDestination(), useJdbcBatching);
 			service.submit(worker);
 			currentOffset = currentOffset + numberOfRecordsPerWorker;
 		}

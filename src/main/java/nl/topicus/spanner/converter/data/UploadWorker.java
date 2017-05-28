@@ -33,8 +33,11 @@ public class UploadWorker implements Runnable
 
 	private String urlDestination;
 
+	private boolean useJdbcBatching;
+
 	UploadWorker(String name, String selectFormat, String sourceTable, String destinationTable, Columns cols,
-			int beginOffset, int numberOfRecordsToCopy, int batchSize, String urlSource, String urlDestination)
+			int beginOffset, int numberOfRecordsToCopy, int batchSize, String urlSource, String urlDestination,
+			boolean useJdbcBatching)
 	{
 		this.name = name;
 		this.selectFormat = selectFormat;
@@ -46,6 +49,7 @@ public class UploadWorker implements Runnable
 		this.batchSize = batchSize;
 		this.urlSource = urlSource;
 		this.urlDestination = urlDestination;
+		this.useJdbcBatching = useJdbcBatching;
 	}
 
 	@Override
@@ -83,9 +87,14 @@ public class UploadWorker implements Runnable
 							statement.setObject(index, object, type);
 							index++;
 						}
-						statement.executeUpdate();
+						if (useJdbcBatching)
+							statement.addBatch();
+						else
+							statement.executeUpdate();
 						recordCount++;
 					}
+					if (useJdbcBatching)
+						statement.executeBatch();
 				}
 				destination.commit();
 				log.info(name + ": " + sourceTable + ": Records copied so far: " + recordCount + " of "
