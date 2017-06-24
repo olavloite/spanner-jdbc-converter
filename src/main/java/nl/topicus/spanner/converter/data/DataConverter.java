@@ -125,7 +125,7 @@ public class DataConverter
 			log.warning("Table " + tableSpec + " does not have a primary key. No data will be copied.");
 			return;
 		}
-		String sql = "INSERT INTO `" + table + "` (" + cols.getColumnNames() + ") VALUES \n";
+		String sql = "INSERT INTO " + table + " (" + cols.getColumnNames() + ") VALUES \n";
 		sql = sql + "(" + cols.getColumnParameters() + ")";
 		PreparedStatement statement = destination.prepareStatement(sql);
 		log.info("About to copy data from table " + tableSpec);
