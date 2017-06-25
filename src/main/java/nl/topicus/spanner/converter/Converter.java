@@ -8,6 +8,7 @@ import java.sql.SQLException;
 
 import nl.topicus.spanner.converter.cfg.ConverterConfiguration;
 import nl.topicus.spanner.converter.data.DataConverter;
+import nl.topicus.spanner.converter.ddl.IndexConverter;
 import nl.topicus.spanner.converter.ddl.TableConverter;
 
 public class Converter
@@ -68,6 +69,9 @@ public class Converter
 	{
 		TableConverter tableConverter = new TableConverter(source, destination, config);
 		tableConverter.convert("", "", true);
+
+		IndexConverter indexConverter = new IndexConverter(source, destination, config);
+		indexConverter.convert("", "", true);
 
 		DataConverter dataConverter = new DataConverter(source, destination, config);
 		dataConverter.convert("", "");
