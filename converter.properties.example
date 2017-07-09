@@ -5,3 +5,7 @@ TableConverter.specificColumnMapping.uuid=BYTES(16)
 
 #Data converter properties
 DataConverter.convertMode=SkipExisting
+DataConverter.batchSize=1000
+DataConverter.maxNumberOfWorkers=100
+DataConverter.uploadWorkerMaxWaitInMinutes=60
+DataConverter.useJdbcBatching=true

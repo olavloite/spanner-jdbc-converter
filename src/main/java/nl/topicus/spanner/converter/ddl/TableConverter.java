@@ -13,6 +13,7 @@ import java.util.logging.Logger;
 
 import nl.topicus.spanner.converter.ConvertMode;
 import nl.topicus.spanner.converter.cfg.ConverterConfiguration;
+import nl.topicus.spanner.converter.cfg.ConverterConfiguration.DatabaseType;
 
 public class TableConverter
 {
@@ -49,6 +50,14 @@ public class TableConverter
 
 	private void registerDefaultColumnTypes()
 	{
+		if (config.getDestinationDatabaseType() == DatabaseType.CloudSpanner)
+			registerDefaultCloudSpannerColumnTypes();
+		else if (config.getDestinationDatabaseType() == DatabaseType.PostgreSQL)
+			registerDefaultPostgreSQLColumnTypes();
+	}
+
+	private void registerDefaultCloudSpannerColumnTypes()
+	{
 		registerColumnType(Types.BOOLEAN, "BOOL");
 		registerColumnType(Types.BIT, "BOOL");
 		registerColumnType(Types.BIGINT, "INT64");
@@ -70,6 +79,31 @@ public class TableConverter
 		registerColumnType(Types.CLOB, "STRING($1)");
 		registerColumnType(Types.BLOB, "BYTES($1)");
 		registerColumnType(Types.NUMERIC, "FLOAT64");
+	}
+
+	private void registerDefaultPostgreSQLColumnTypes()
+	{
+		registerColumnType(Types.BOOLEAN, "BOOLEAN");
+		registerColumnType(Types.BIT, "BOOLEAN");
+		registerColumnType(Types.BIGINT, "BIGINT");
+		registerColumnType(Types.SMALLINT, "SMALLINT");
+		registerColumnType(Types.TINYINT, "SMALLINT");
+		registerColumnType(Types.INTEGER, "INTEGER");
+		registerColumnType(Types.CHAR, "CHARACTER");
+		registerColumnType(Types.VARCHAR, "VARCHAR($1)");
+		registerColumnType(Types.FLOAT, "REAL");
+		registerColumnType(Types.DOUBLE, "DOUBLE PRECISION");
+		registerColumnType(Types.DECIMAL, "DECIMAL");
+		registerColumnType(Types.DATE, "DATE");
+		registerColumnType(Types.TIME, "TIME");
+		registerColumnType(Types.TIMESTAMP, "TIMESTAMP");
+		registerColumnType(Types.VARBINARY, "BYTEA");
+		registerColumnType(Types.BINARY, "BYTEA");
+		registerColumnType(Types.LONGVARCHAR, "TEXT");
+		registerColumnType(Types.LONGVARBINARY, "BYTEA");
+		registerColumnType(Types.CLOB, "TEXT");
+		registerColumnType(Types.BLOB, "BYTEA");
+		registerColumnType(Types.NUMERIC, "NUMERIC");
 	}
 
 	private void registerConfiguredColumnMappings()

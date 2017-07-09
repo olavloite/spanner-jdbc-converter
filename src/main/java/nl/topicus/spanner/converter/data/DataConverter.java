@@ -25,19 +25,6 @@ public class DataConverter
 
 	private final ConverterConfiguration config;
 
-	private int batchSize = 1000;
-
-	private int numberOfWorkers = 10;
-
-	private boolean runInAutoCommit = false;
-
-	/**
-	 * Use JDBC batching yes/no? (Added for testing purposes) Turning on
-	 * batching does not speed up the process, as the underlying Google Cloud
-	 * Spanner framework already batches transactions.
-	 */
-	private boolean useJdbcBatching = true;
-
 	private String selectFormat = "SELECT $COLUMNS FROM $TABLE ORDER BY $PRIMARY_KEY LIMIT $BATCH_SIZE OFFSET $OFFSET";
 
 	static final class Columns
@@ -75,7 +62,8 @@ public class DataConverter
 
 	public void convert(String catalog, String schema) throws SQLException
 	{
-		destination.setAutoCommit(runInAutoCommit);
+		int batchSize = config.getBatchSize();
+		destination.setAutoCommit(false);
 		try (ResultSet tables = source.getMetaData().getTables(catalog, schema, null, new String[] { "TABLE" }))
 		{
 			while (tables.next())
@@ -112,6 +100,7 @@ public class DataConverter
 
 	private void convertTable(String catalog, String schema, String table) throws SQLException
 	{
+		int batchSize = config.getBatchSize();
 		String tableSpec = "";
 		if (catalog != null && !"".equals(catalog))
 			tableSpec = tableSpec + catalog + ".";
@@ -158,13 +147,13 @@ public class DataConverter
 						statement.setObject(index, object, type);
 						index++;
 					}
-					if (useJdbcBatching)
+					if (config.isUseJdbcBatching())
 						statement.addBatch();
 					else
 						statement.executeUpdate();
 					recordCount++;
 				}
-				if (useJdbcBatching)
+				if (config.isUseJdbcBatching())
 					statement.executeBatch();
 			}
 			destination.commit();
@@ -187,7 +176,9 @@ public class DataConverter
 		}
 		log.info("About to copy data from table " + tableSpec);
 
+		int batchSize = config.getBatchSize();
 		int totalRecordCount = getSourceRecordCount(tableSpec);
+		int numberOfWorkers = calculateNumberOfWorkers(totalRecordCount);
 		int numberOfRecordsPerWorker = totalRecordCount / numberOfWorkers;
 		if (totalRecordCount % numberOfWorkers > 0)
 			numberOfRecordsPerWorker++;
@@ -198,14 +189,14 @@ public class DataConverter
 			int workerRecordCount = Math.min(numberOfRecordsPerWorker, totalRecordCount - currentOffset);
 			UploadWorker worker = new UploadWorker("UploadWorker-" + workerNumber, selectFormat, tableSpec, table,
 					cols, currentOffset, workerRecordCount, batchSize, config.getUrlSource(),
-					config.getUrlDestination(), useJdbcBatching);
+					config.getUrlDestination(), config.isUseJdbcBatching());
 			service.submit(worker);
 			currentOffset = currentOffset + numberOfRecordsPerWorker;
 		}
 		service.shutdown();
 		try
 		{
-			service.awaitTermination(6, TimeUnit.HOURS);
+			service.awaitTermination(config.getUploadWorkerMaxWaitInMinutes(), TimeUnit.MINUTES);
 		}
 		catch (InterruptedException e)
 		{
@@ -213,6 +204,12 @@ public class DataConverter
 			throw new RuntimeException(e);
 		}
 
+	}
+
+	private int calculateNumberOfWorkers(int totalRecordCount)
+	{
+		int res = totalRecordCount / config.getBatchSize() + 1;
+		return Math.min(res, config.getMaxNumberOfWorkers());
 	}
 
 	private Columns getColumns(String catalog, String schema, String table) throws SQLException
@@ -282,16 +279,6 @@ public class DataConverter
 		log.info("Delete done on " + table);
 	}
 
-	public int getBatchSize()
-	{
-		return batchSize;
-	}
-
-	public void setBatchSize(int batchSize)
-	{
-		this.batchSize = batchSize;
-	}
-
 	public String getSelectFormat()
 	{
 		return selectFormat;
@@ -300,16 +287,6 @@ public class DataConverter
 	public void setSelectFormat(String selectFormat)
 	{
 		this.selectFormat = selectFormat;
-	}
-
-	public boolean isRunInAutoCommit()
-	{
-		return runInAutoCommit;
-	}
-
-	public void setRunInAutoCommit(boolean runInAutoCommit)
-	{
-		this.runInAutoCommit = runInAutoCommit;
 	}
 
 }
