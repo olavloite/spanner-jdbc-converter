@@ -31,14 +31,14 @@ public class UploadWorker implements Runnable
 
 	private int batchSize;
 
-	private String urlSource;
+	private Connection source;
 
 	private String urlDestination;
 
 	private boolean useJdbcBatching;
 
 	UploadWorker(String name, String selectFormat, String sourceTable, String destinationTable, Columns insertCols,
-			Columns selectCols, int beginOffset, int numberOfRecordsToCopy, int batchSize, String urlSource,
+			Columns selectCols, int beginOffset, int numberOfRecordsToCopy, int batchSize, Connection source,
 			String urlDestination, boolean useJdbcBatching)
 	{
 		this.name = name;
@@ -50,7 +50,7 @@ public class UploadWorker implements Runnable
 		this.beginOffset = beginOffset;
 		this.numberOfRecordsToCopy = numberOfRecordsToCopy;
 		this.batchSize = batchSize;
-		this.urlSource = urlSource;
+		this.source = source;
 		this.urlDestination = urlDestination;
 		this.useJdbcBatching = useJdbcBatching;
 	}
@@ -58,8 +58,8 @@ public class UploadWorker implements Runnable
 	@Override
 	public void run()
 	{
-		try (Connection source = DriverManager.getConnection(urlSource);
-				Connection destination = DriverManager.getConnection(urlDestination))
+		// Connection source = DriverManager.getConnection(urlSource);
+		try (Connection destination = DriverManager.getConnection(urlDestination))
 		{
 			log.info(name + ": " + sourceTable + ": Starting copying " + numberOfRecordsToCopy + " records");
 

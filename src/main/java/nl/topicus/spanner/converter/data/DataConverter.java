@@ -187,7 +187,7 @@ public class DataConverter
 		{
 			int workerRecordCount = Math.min(numberOfRecordsPerWorker, totalRecordCount - currentOffset);
 			UploadWorker worker = new UploadWorker("UploadWorker-" + workerNumber, selectFormat, tableSpec, table,
-					insertCols, selectCols, currentOffset, workerRecordCount, batchSize, config.getUrlSource(),
+					insertCols, selectCols, currentOffset, workerRecordCount, batchSize, source,
 					config.getUrlDestination(), config.isUseJdbcBatching());
 			service.submit(worker);
 			currentOffset = currentOffset + numberOfRecordsPerWorker;
