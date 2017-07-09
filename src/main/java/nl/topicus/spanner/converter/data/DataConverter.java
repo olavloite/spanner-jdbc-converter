@@ -64,76 +64,74 @@ public class DataConverter
 	{
 		int batchSize = config.getBatchSize();
 		destination.setAutoCommit(false);
-		try (ResultSet tables = source.getMetaData().getTables(catalog, schema, null, new String[] { "TABLE" }))
+		source.setAutoCommit(false);
+		source.setReadOnly(true);
+		try (ResultSet tables = destination.getMetaData().getTables(catalog, schema, null, new String[] { "TABLE" }))
 		{
 			while (tables.next())
 			{
-				String table = tables.getString("TABLE_NAME");
-				// Check whether the destination table is empty.
-				int destinationRecordCount = getDestinationRecordCount(table);
-				if (destinationRecordCount == 0 || config.getDataConvertMode() == ConvertMode.DropAndRecreate)
+				String tableSchema = tables.getString("TABLE_SCHEM");
+				if (!config.getDestinationDatabaseType().isSystemSchema(tableSchema))
 				{
-					if (destinationRecordCount > 0)
+					String table = tables.getString("TABLE_NAME");
+					// Check whether the destination table is empty.
+					int destinationRecordCount = getDestinationRecordCount(table);
+					if (destinationRecordCount == 0 || config.getDataConvertMode() == ConvertMode.DropAndRecreate)
 					{
-						deleteAll(table);
-					}
-					int sourceRecordCount = getSourceRecordCount(getTableSpec(catalog, schema, table));
-					if (sourceRecordCount > batchSize)
-					{
-						convertTableWithWorkers(catalog, schema, table);
+						if (destinationRecordCount > 0)
+						{
+							deleteAll(table);
+						}
+						int sourceRecordCount = getSourceRecordCount(getTableSpec(catalog, tableSchema, table));
+						if (sourceRecordCount > batchSize)
+						{
+							convertTableWithWorkers(catalog, tableSchema, table);
+						}
+						else
+						{
+							convertTable(catalog, tableSchema, table);
+						}
 					}
 					else
 					{
-						convertTable(catalog, schema, table);
+						if (config.getDataConvertMode() == ConvertMode.ThrowExceptionIfExists)
+							throw new IllegalStateException("Table " + table + " is not empty");
+						else if (config.getDataConvertMode() == ConvertMode.SkipExisting)
+							log.info("Skipping data copy for table " + table);
 					}
-				}
-				else
-				{
-					if (config.getDataConvertMode() == ConvertMode.ThrowExceptionIfExists)
-						throw new IllegalStateException("Table " + table + " is not empty");
-					else if (config.getDataConvertMode() == ConvertMode.SkipExisting)
-						log.info("Skipping data copy for table " + table);
 				}
 			}
 		}
+		source.commit();
 	}
 
 	private void convertTable(String catalog, String schema, String table) throws SQLException
 	{
 		int batchSize = config.getBatchSize();
-		String tableSpec = "";
-		if (catalog != null && !"".equals(catalog))
-			tableSpec = tableSpec + catalog + ".";
-		if (schema != null && !"".equals(schema))
-			tableSpec = tableSpec + schema + ".";
-		tableSpec = tableSpec + table;
+		String tableSpec = getTableSpec(catalog, schema, table);
 
-		Columns cols = getColumns(catalog, schema, table);
-		if (cols.primaryKeyCols.isEmpty())
+		Columns insertCols = getColumns(catalog, schema, table, false);
+		if (insertCols.primaryKeyCols.isEmpty())
 		{
 			log.warning("Table " + tableSpec + " does not have a primary key. No data will be copied.");
 			return;
 		}
-		String sql = "INSERT INTO " + table + " (" + cols.getColumnNames() + ") VALUES \n";
-		sql = sql + "(" + cols.getColumnParameters() + ")";
+		String sql = "INSERT INTO " + table + " (" + insertCols.getColumnNames() + ") VALUES \n";
+		sql = sql + "(" + insertCols.getColumnParameters() + ")";
 		PreparedStatement statement = destination.prepareStatement(sql);
 		log.info("About to copy data from table " + tableSpec);
 
 		int currentOffset = 0;
-		int totalRecordCount = 0;
-		try (ResultSet count = source.createStatement().executeQuery("SELECT COUNT(*) FROM " + tableSpec))
-		{
-			if (count.next())
-				totalRecordCount = count.getInt(1);
-		}
 		int recordCount = 0;
+		int totalRecordCount = getSourceRecordCount(tableSpec);
 		log.info(tableSpec + ": Records to be copied: " + totalRecordCount);
 
+		Columns selectCols = getColumns(catalog, schema, table, true);
 		while (true)
 		{
-			String select = selectFormat.replace("$COLUMNS", cols.getColumnNames());
+			String select = selectFormat.replace("$COLUMNS", selectCols.getColumnNames());
 			select = select.replace("$TABLE", tableSpec);
-			select = select.replace("$PRIMARY_KEY", cols.getPrimaryKeyColumns());
+			select = select.replace("$PRIMARY_KEY", selectCols.getPrimaryKeyColumns());
 			select = select.replace("$BATCH_SIZE", String.valueOf(batchSize));
 			select = select.replace("$OFFSET", String.valueOf(currentOffset));
 			try (ResultSet rs = source.createStatement().executeQuery(select))
@@ -141,7 +139,7 @@ public class DataConverter
 				while (rs.next())
 				{
 					int index = 1;
-					for (Integer type : cols.columnTypes)
+					for (Integer type : insertCols.columnTypes)
 					{
 						Object object = rs.getObject(index);
 						statement.setObject(index, object, type);
@@ -168,8 +166,9 @@ public class DataConverter
 	private void convertTableWithWorkers(String catalog, String schema, String table) throws SQLException
 	{
 		String tableSpec = getTableSpec(catalog, schema, table);
-		Columns cols = getColumns(catalog, schema, table);
-		if (cols.primaryKeyCols.isEmpty())
+		Columns insertCols = getColumns(catalog, schema, table, false);
+		Columns selectCols = getColumns(catalog, schema, table, true);
+		if (insertCols.primaryKeyCols.isEmpty())
 		{
 			log.warning("Table " + tableSpec + " does not have a primary key. No data will be copied.");
 			return;
@@ -188,7 +187,7 @@ public class DataConverter
 		{
 			int workerRecordCount = Math.min(numberOfRecordsPerWorker, totalRecordCount - currentOffset);
 			UploadWorker worker = new UploadWorker("UploadWorker-" + workerNumber, selectFormat, tableSpec, table,
-					cols, currentOffset, workerRecordCount, batchSize, config.getUrlSource(),
+					insertCols, selectCols, currentOffset, workerRecordCount, batchSize, config.getUrlSource(),
 					config.getUrlDestination(), config.isUseJdbcBatching());
 			service.submit(worker);
 			currentOffset = currentOffset + numberOfRecordsPerWorker;
@@ -212,18 +211,22 @@ public class DataConverter
 		return Math.min(res, config.getMaxNumberOfWorkers());
 	}
 
-	private Columns getColumns(String catalog, String schema, String table) throws SQLException
+	private Columns getColumns(String catalog, String schema, String table, boolean forSelect) throws SQLException
 	{
 		Columns res = new Columns();
-		try (ResultSet columns = source.getMetaData().getColumns(catalog, schema, table, null))
+		try (ResultSet columns = destination.getMetaData().getColumns(catalog, schema, table, null))
 		{
 			while (columns.next())
 			{
-				res.columnNames.add(columns.getString("COLUMN_NAME"));
+				// When doing a select and a column is named the same as the
+				// table, Cloud Spanner will misinterpret the query. In those
+				// cases, the column name will be prefixed by the table name
+				res.columnNames.add(forSelect && columns.getString("COLUMN_NAME").equalsIgnoreCase(table) ? table + "."
+						+ columns.getString("COLUMN_NAME") : columns.getString("COLUMN_NAME"));
 				res.columnTypes.add(columns.getInt("DATA_TYPE"));
 			}
 		}
-		try (ResultSet keys = source.getMetaData().getPrimaryKeys(catalog, schema, table))
+		try (ResultSet keys = destination.getMetaData().getPrimaryKeys(catalog, schema, table))
 		{
 			while (keys.next())
 			{
@@ -238,7 +241,7 @@ public class DataConverter
 		String tableSpec = "";
 		if (catalog != null && !"".equals(catalog))
 			tableSpec = tableSpec + catalog + ".";
-		if (schema != null && !"".equals(schema))
+		if (schema != null && !"".equals(schema) && !"public".equals(schema))
 			tableSpec = tableSpec + schema + ".";
 		tableSpec = tableSpec + table;
 

@@ -38,12 +38,17 @@ public class IndexConverter
 		{
 			while (tables.next())
 			{
-				String table = tables.getString("TABLE_NAME");
-				try (ResultSet indices = destination.getMetaData().getIndexInfo(catalog, schema, table, false, true))
+				String tableSchema = tables.getString("TABLE_SCHEM");
+				if (!config.getDestinationDatabaseType().isSystemSchema(tableSchema))
 				{
-					while (indices.next())
+					String table = tables.getString("TABLE_NAME");
+					try (ResultSet indices = destination.getMetaData()
+							.getIndexInfo(catalog, schema, table, false, true))
 					{
-						existingIndices.add(indices.getString("INDEX_NAME").toUpperCase());
+						while (indices.next())
+						{
+							existingIndices.add(indices.getString("INDEX_NAME").toUpperCase());
+						}
 					}
 				}
 			}
@@ -57,12 +62,16 @@ public class IndexConverter
 		{
 			while (tables.next())
 			{
-				String table = tables.getString("TABLE_NAME");
-				try (ResultSet pks = source.getMetaData().getPrimaryKeys(catalog, schema, table))
+				String tableSchema = tables.getString("TABLE_SCHEM");
+				if (!config.getSourceDatabaseType().isSystemSchema(tableSchema))
 				{
-					while (pks.next())
+					String table = tables.getString("TABLE_NAME");
+					try (ResultSet pks = source.getMetaData().getPrimaryKeys(catalog, tableSchema, table))
 					{
-						primaryKeys.add(pks.getString("PK_NAME").toUpperCase());
+						while (pks.next())
+						{
+							primaryKeys.add(pks.getString("PK_NAME").toUpperCase());
+						}
 					}
 				}
 			}
@@ -78,45 +87,52 @@ public class IndexConverter
 		{
 			while (tbls.next())
 			{
-				String table = tbls.getString("TABLE_NAME");
-				try (ResultSet indices = source.getMetaData().getIndexInfo(catalog, schema, table, false, true))
+				String tableSchema = tbls.getString("TABLE_SCHEM");
+				if (!config.getSourceDatabaseType().isSystemSchema(tableSchema))
 				{
-					while (indices.next())
+					String table = tbls.getString("TABLE_NAME");
+					try (ResultSet indices = source.getMetaData()
+							.getIndexInfo(catalog, tableSchema, table, false, true))
 					{
-						String indexName = indices.getString("INDEX_NAME");
-						// Skip all primary keys
-						if (!primaryKeys.contains(indexName.toUpperCase()))
+						while (indices.next())
 						{
-							boolean exists = existingIndices.contains(indices.getString("INDEX_NAME").toUpperCase());
-							if (exists && config.getTableConvertMode() == ConvertMode.DropAndRecreate)
+							String indexName = indices.getString("INDEX_NAME");
+							// Skip all primary keys
+							if (!primaryKeys.contains(indexName.toUpperCase()))
 							{
-								log.info("Index " + indices.getString("INDEX_NAME") + " already exists. Dropping index");
-								dropIndex(indices.getString("INDEX_NAME"));
-								log.info(indices.getString("INDEX_NAME") + " dropped");
-							}
-							String definition = getIndexDefinition(indices, exists);
-							if (definition != null)
-							{
-								sql.append(definition).append("\n;\n\n");
-								sql.append("/*---------------------------------------------------------------------*/\n");
-								if (create)
+								boolean exists = existingIndices
+										.contains(indices.getString("INDEX_NAME").toUpperCase());
+								if (exists && config.getTableConvertMode() == ConvertMode.DropAndRecreate)
 								{
-									log.info("Creating index " + indexName);
-									destination.createStatement().executeUpdate(definition);
+									log.info("Index " + indices.getString("INDEX_NAME")
+											+ " already exists. Dropping index");
+									dropIndex(indices.getString("INDEX_NAME"));
+									log.info(indices.getString("INDEX_NAME") + " dropped");
+								}
+								String definition = getIndexDefinition(indices, exists);
+								if (definition != null)
+								{
+									sql.append(definition).append("\n;\n\n");
+									sql.append("/*---------------------------------------------------------------------*/\n");
+									if (create)
+									{
+										log.info("Creating index " + indexName);
+										destination.createStatement().executeUpdate(definition);
+									}
+									else
+									{
+										log.info("Index definition created: " + indexName);
+									}
 								}
 								else
 								{
-									log.info("Index definition created: " + indexName);
+									log.info("Skipping index " + indexName);
 								}
 							}
-							else
+							while (!indices.isAfterLast() && indexName.equals(indices.getString("INDEX_NAME")))
 							{
-								log.info("Skipping index " + indexName);
+								indices.next();
 							}
-						}
-						while (!indices.isAfterLast() && indexName.equals(indices.getString("INDEX_NAME")))
-						{
-							indices.next();
 						}
 					}
 				}

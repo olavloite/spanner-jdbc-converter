@@ -67,14 +67,17 @@ public class Converter
 	private static void convert(Connection source, Connection destination, ConverterConfiguration config)
 			throws SQLException
 	{
-		TableConverter tableConverter = new TableConverter(source, destination, config);
-		tableConverter.convert("", "", true);
+		if (config.getTableConvertMode() != ConvertMode.SkipAll)
+		{
+			TableConverter tableConverter = new TableConverter(source, destination, config);
+			tableConverter.convert(null, null, true);
 
-		IndexConverter indexConverter = new IndexConverter(source, destination, config);
-		indexConverter.convert("", "", true);
+			IndexConverter indexConverter = new IndexConverter(source, destination, config);
+			indexConverter.convert(null, null, true);
+		}
 
 		DataConverter dataConverter = new DataConverter(source, destination, config);
-		dataConverter.convert("", "");
+		dataConverter.convert(null, null);
 	}
 
 	private static boolean confirm(String msg)

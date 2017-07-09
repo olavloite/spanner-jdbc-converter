@@ -21,6 +21,24 @@ public class ConverterConfiguration
 			{
 				return url.toLowerCase().startsWith("jdbc:cloudspanner");
 			}
+
+			@Override
+			public boolean isPrimaryKeyDefinitionInsideColumnList()
+			{
+				return false;
+			}
+
+			@Override
+			public String getDefaultSchemaName()
+			{
+				return "";
+			}
+
+			@Override
+			public boolean isSystemSchema(String schema)
+			{
+				return schema != null && schema.equalsIgnoreCase("INFORMATION_SCHEMA");
+			}
 		},
 		PostgreSQL
 		{
@@ -29,9 +47,34 @@ public class ConverterConfiguration
 			{
 				return url.toLowerCase().startsWith("jdbc:postgresql");
 			}
+
+			@Override
+			public boolean isPrimaryKeyDefinitionInsideColumnList()
+			{
+				return true;
+			}
+
+			@Override
+			public String getDefaultSchemaName()
+			{
+				return "public";
+			}
+
+			@Override
+			public boolean isSystemSchema(String schema)
+			{
+				return schema != null
+						&& (schema.equalsIgnoreCase("INFORMATION_SCHEMA") || schema.toUpperCase().startsWith("PG_"));
+			}
 		};
 
 		public abstract boolean isType(String url);
+
+		public abstract boolean isPrimaryKeyDefinitionInsideColumnList();
+
+		public abstract String getDefaultSchemaName();
+
+		public abstract boolean isSystemSchema(String schema);
 
 		public static DatabaseType getType(String url)
 		{
@@ -175,6 +218,11 @@ public class ConverterConfiguration
 	public DatabaseType getDestinationDatabaseType()
 	{
 		return DatabaseType.getType(urlDestination);
+	}
+
+	public boolean isPrimaryKeyDefinitionInsideColumnList()
+	{
+		return getDestinationDatabaseType().isPrimaryKeyDefinitionInsideColumnList();
 	}
 
 }

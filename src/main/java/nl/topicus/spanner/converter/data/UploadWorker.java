@@ -21,7 +21,9 @@ public class UploadWorker implements Runnable
 
 	private String destinationTable;
 
-	private Columns cols;
+	private Columns insertCols;
+
+	private Columns selectCols;
 
 	private int beginOffset;
 
@@ -35,15 +37,16 @@ public class UploadWorker implements Runnable
 
 	private boolean useJdbcBatching;
 
-	UploadWorker(String name, String selectFormat, String sourceTable, String destinationTable, Columns cols,
-			int beginOffset, int numberOfRecordsToCopy, int batchSize, String urlSource, String urlDestination,
-			boolean useJdbcBatching)
+	UploadWorker(String name, String selectFormat, String sourceTable, String destinationTable, Columns insertCols,
+			Columns selectCols, int beginOffset, int numberOfRecordsToCopy, int batchSize, String urlSource,
+			String urlDestination, boolean useJdbcBatching)
 	{
 		this.name = name;
 		this.selectFormat = selectFormat;
 		this.sourceTable = sourceTable;
 		this.destinationTable = destinationTable;
-		this.cols = cols;
+		this.insertCols = insertCols;
+		this.selectCols = selectCols;
 		this.beginOffset = beginOffset;
 		this.numberOfRecordsToCopy = numberOfRecordsToCopy;
 		this.batchSize = batchSize;
@@ -61,8 +64,8 @@ public class UploadWorker implements Runnable
 			log.info(name + ": " + sourceTable + ": Starting copying " + numberOfRecordsToCopy + " records");
 
 			destination.setAutoCommit(false);
-			String sql = "INSERT INTO " + destinationTable + " (" + cols.getColumnNames() + ") VALUES \n";
-			sql = sql + "(" + cols.getColumnParameters() + ")";
+			String sql = "INSERT INTO " + destinationTable + " (" + insertCols.getColumnNames() + ") VALUES \n";
+			sql = sql + "(" + insertCols.getColumnParameters() + ")";
 			PreparedStatement statement = destination.prepareStatement(sql);
 
 			int lastRecord = beginOffset + numberOfRecordsToCopy;
@@ -71,9 +74,9 @@ public class UploadWorker implements Runnable
 			while (true)
 			{
 				int limit = Math.min(batchSize, lastRecord - currentOffset);
-				String select = selectFormat.replace("$COLUMNS", cols.getColumnNames());
+				String select = selectFormat.replace("$COLUMNS", selectCols.getColumnNames());
 				select = select.replace("$TABLE", sourceTable);
-				select = select.replace("$PRIMARY_KEY", cols.getPrimaryKeyColumns());
+				select = select.replace("$PRIMARY_KEY", selectCols.getPrimaryKeyColumns());
 				select = select.replace("$BATCH_SIZE", String.valueOf(limit));
 				select = select.replace("$OFFSET", String.valueOf(currentOffset));
 				try (ResultSet rs = source.createStatement().executeQuery(select))
@@ -81,7 +84,7 @@ public class UploadWorker implements Runnable
 					while (rs.next())
 					{
 						int index = 1;
-						for (Integer type : cols.columnTypes)
+						for (Integer type : insertCols.columnTypes)
 						{
 							Object object = rs.getObject(index);
 							statement.setObject(index, object, type);

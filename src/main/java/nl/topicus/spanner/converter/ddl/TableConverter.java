@@ -66,6 +66,7 @@ public class TableConverter
 		registerColumnType(Types.INTEGER, "INT64");
 		registerColumnType(Types.CHAR, "STRING(1)");
 		registerColumnType(Types.VARCHAR, "STRING($1)");
+		registerColumnType(Types.NVARCHAR, "STRING($1)");
 		registerColumnType(Types.FLOAT, "FLOAT64");
 		registerColumnType(Types.DOUBLE, "FLOAT64");
 		registerColumnType(Types.DECIMAL, "FLOAT64");
@@ -91,6 +92,7 @@ public class TableConverter
 		registerColumnType(Types.INTEGER, "INTEGER");
 		registerColumnType(Types.CHAR, "CHARACTER");
 		registerColumnType(Types.VARCHAR, "VARCHAR($1)");
+		registerColumnType(Types.NVARCHAR, "VARCHAR($1)");
 		registerColumnType(Types.FLOAT, "REAL");
 		registerColumnType(Types.DOUBLE, "DOUBLE PRECISION");
 		registerColumnType(Types.DECIMAL, "DECIMAL");
@@ -133,7 +135,11 @@ public class TableConverter
 		{
 			while (tables.next())
 			{
-				existingTables.add(tables.getString("TABLE_NAME").toUpperCase());
+				String tableSchema = tables.getString("TABLE_SCHEM");
+				if (!config.getDestinationDatabaseType().isSystemSchema(tableSchema))
+				{
+					existingTables.add(tables.getString("TABLE_NAME").toUpperCase());
+				}
 			}
 		}
 	}
@@ -146,31 +152,35 @@ public class TableConverter
 		{
 			while (tables.next())
 			{
-				boolean exists = existingTables.contains(tables.getString("TABLE_NAME").toUpperCase());
-				if (exists && config.getTableConvertMode() == ConvertMode.DropAndRecreate)
+				String tableSchema = tables.getString("TABLE_SCHEM");
+				if (!config.getSourceDatabaseType().isSystemSchema(tableSchema))
 				{
-					log.info("Table " + tables.getString("TABLE_NAME") + " already exists. Dropping table");
-					dropTable(tables.getString("TABLE_NAME"));
-					log.info(tables.getString("TABLE_NAME") + " dropped");
-				}
-				String definition = getTableDefinition(tables, exists);
-				if (definition != null)
-				{
-					sql.append(definition).append("\n;\n\n");
-					sql.append("/*---------------------------------------------------------------------*/\n");
-					if (create)
+					boolean exists = existingTables.contains(tables.getString("TABLE_NAME").toUpperCase());
+					if (exists && config.getTableConvertMode() == ConvertMode.DropAndRecreate)
 					{
-						log.info("Creating table " + tables.getString("TABLE_NAME"));
-						destination.createStatement().executeUpdate(definition);
+						log.info("Table " + tables.getString("TABLE_NAME") + " already exists. Dropping table");
+						dropTable(tables.getString("TABLE_NAME"));
+						log.info(tables.getString("TABLE_NAME") + " dropped");
+					}
+					String definition = getTableDefinition(tables, exists);
+					if (definition != null)
+					{
+						sql.append(definition).append("\n;\n\n");
+						sql.append("/*---------------------------------------------------------------------*/\n");
+						if (create)
+						{
+							log.info("Creating table " + tables.getString("TABLE_NAME"));
+							destination.createStatement().executeUpdate(definition);
+						}
+						else
+						{
+							log.info("Table definition created: " + tables.getString("TABLE_NAME"));
+						}
 					}
 					else
 					{
-						log.info("Table definition created: " + tables.getString("TABLE_NAME"));
+						log.info("Skipping table " + tables.getString("TABLE_NAME"));
 					}
-				}
-				else
-				{
-					log.info("Skipping table " + tables.getString("TABLE_NAME"));
 				}
 			}
 		}
@@ -205,23 +215,33 @@ public class TableConverter
 				sql.append(getNotNull(columns));
 				first = false;
 			}
-			sql.append(")");
 		}
+		if (!config.isPrimaryKeyDefinitionInsideColumnList())
+			sql.append(")");
 		try (ResultSet keys = source.getMetaData().getPrimaryKeys(catalog, schema, table))
 		{
-			sql.append(" PRIMARY KEY (");
+			boolean hasKey = false;
+			StringBuilder pk = new StringBuilder();
+			if (config.isPrimaryKeyDefinitionInsideColumnList())
+				pk.append(", ");
+			pk.append(" PRIMARY KEY (");
 			boolean first = true;
 			while (keys.next())
 			{
+				hasKey = true;
 				if (!first)
 				{
-					sql.append(", ");
+					pk.append(", ");
 				}
-				sql.append(keys.getString("COLUMN_NAME"));
+				pk.append(keys.getString("COLUMN_NAME"));
 				first = false;
 			}
-			sql.append(")");
+			pk.append(")");
+			if (hasKey)
+				sql.append(pk);
 		}
+		if (config.isPrimaryKeyDefinitionInsideColumnList())
+			sql.append(")");
 		return sql.toString();
 	}
 
