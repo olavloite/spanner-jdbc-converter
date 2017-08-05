@@ -218,9 +218,9 @@ public class TableConverter
 		}
 		if (!config.isPrimaryKeyDefinitionInsideColumnList())
 			sql.append(")");
+		boolean hasKey = false;
 		try (ResultSet keys = source.getMetaData().getPrimaryKeys(catalog, schema, table))
 		{
-			boolean hasKey = false;
 			StringBuilder pk = new StringBuilder();
 			if (config.isPrimaryKeyDefinitionInsideColumnList())
 				pk.append(", ");
@@ -242,6 +242,11 @@ public class TableConverter
 		}
 		if (config.isPrimaryKeyDefinitionInsideColumnList())
 			sql.append(")");
+		if (!hasKey)
+		{
+			log.info("Skipping table " + table + " as it has no primary key");
+			return null;
+		}
 		return sql.toString();
 	}
 
