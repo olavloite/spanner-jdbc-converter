@@ -75,7 +75,7 @@ public class DataConverter
 				{
 					String table = tables.getString("TABLE_NAME");
 					// Check whether the destination table is empty.
-					int destinationRecordCount = getDestinationRecordCount(table);
+					long destinationRecordCount = getDestinationRecordCount(table);
 					if (destinationRecordCount == 0 || config.getDataConvertMode() == ConvertMode.DropAndRecreate)
 					{
 						if (destinationRecordCount > 0)
@@ -221,8 +221,8 @@ public class DataConverter
 				// When doing a select and a column is named the same as the
 				// table, Cloud Spanner will misinterpret the query. In those
 				// cases, the column name will be prefixed by the table name
-				res.columnNames.add(forSelect && columns.getString("COLUMN_NAME").equalsIgnoreCase(table) ? table + "."
-						+ columns.getString("COLUMN_NAME") : columns.getString("COLUMN_NAME"));
+				res.columnNames.add(forSelect && columns.getString("COLUMN_NAME").equalsIgnoreCase(table)
+						? table + "." + columns.getString("COLUMN_NAME") : columns.getString("COLUMN_NAME"));
 				res.columnTypes.add(columns.getInt("DATA_TYPE"));
 			}
 		}
@@ -258,13 +258,13 @@ public class DataConverter
 		return 0;
 	}
 
-	private int getDestinationRecordCount(String table) throws SQLException
+	private long getDestinationRecordCount(String table) throws SQLException
 	{
 		String sql = "select count(*) from " + table;
 		try (ResultSet rs = destination.createStatement().executeQuery(sql))
 		{
 			if (rs.next())
-				return rs.getInt(1);
+				return rs.getLong(1);
 		}
 		finally
 		{
