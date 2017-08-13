@@ -41,9 +41,8 @@
 		<dependency>
 			<groupId>nl.topicus</groupId>
 			<artifactId>spanner-jdbc</artifactId>
-			<version>0.10-SNAPSHOT</version>
+			<version>0.11-SNAPSHOT</version>
 		</dependency>
-		<!-- https://mvnrepository.com/artifact/postgresql/postgresql -->
 		<dependency>
 			<groupId>postgresql</groupId>
 			<artifactId>postgresql</artifactId>
@@ -109,6 +108,11 @@
 							<descriptorRefs>
 								<descriptorRef>jar-with-dependencies</descriptorRef>
 							</descriptorRefs>
+							<archive>
+								<manifest>
+									<mainClass>nl.topicus.spanner.converter.Converter</mainClass>
+								</manifest>
+							</archive>
 						</configuration>
 					</plugin>
 				</plugins>

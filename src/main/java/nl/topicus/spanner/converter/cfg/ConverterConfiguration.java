@@ -91,6 +91,8 @@ public class ConverterConfiguration
 
 	private ConvertMode dataConvertMode;
 
+	private Integer numberOfTableWorkers;
+
 	private Integer batchSize;
 
 	private Integer maxNumberOfWorkers;
@@ -107,6 +109,13 @@ public class ConverterConfiguration
 	private final String urlDestination;
 
 	/**
+	 * Cloud Spanner has a strict limit on the size of one transaction. When
+	 * deleting large tables, the delete needs to be chopped into several delete
+	 * statements to avoid exceeding the transaction limit
+	 */
+	private Long maxRecordsInSingleDeleteStatement;
+
+	/**
 	 * Create a default converter configuration
 	 */
 	public ConverterConfiguration(String urlSource, String urlDestination)
@@ -115,6 +124,7 @@ public class ConverterConfiguration
 		this.urlDestination = urlDestination;
 		tableConvertMode = ConvertMode.SkipExisting;
 		dataConvertMode = ConvertMode.SkipExisting;
+		setDefaults();
 	}
 
 	/**
@@ -125,6 +135,15 @@ public class ConverterConfiguration
 		this.urlSource = urlSource;
 		this.urlDestination = urlDestination;
 		properties.load(Files.newBufferedReader(Paths.get(file)));
+		setDefaults();
+	}
+
+	private void setDefaults()
+	{
+		if (getDestinationDatabaseType() == DatabaseType.CloudSpanner && maxRecordsInSingleDeleteStatement == null)
+		{
+			maxRecordsInSingleDeleteStatement = getBatchSize().longValue();
+		}
 	}
 
 	public ConvertMode getTableConvertMode()
@@ -156,6 +175,15 @@ public class ConverterConfiguration
 		return batchSize;
 	}
 
+	public Integer getNumberOfTableWorkers()
+	{
+		if (numberOfTableWorkers == null)
+		{
+			numberOfTableWorkers = Integer.valueOf(properties.getProperty("DataConverter.numberOfTableWorkers", "10"));
+		}
+		return numberOfTableWorkers;
+	}
+
 	public Integer getMaxNumberOfWorkers()
 	{
 		if (maxNumberOfWorkers == null)
@@ -169,8 +197,8 @@ public class ConverterConfiguration
 	{
 		if (uploadWorkerMaxWaitInMinutes == null)
 		{
-			uploadWorkerMaxWaitInMinutes = Integer.valueOf(properties.getProperty(
-					"DataConverter.uploadWorkerMaxWaitInMinutes", "60"));
+			uploadWorkerMaxWaitInMinutes = Integer
+					.valueOf(properties.getProperty("DataConverter.uploadWorkerMaxWaitInMinutes", "60"));
 		}
 		return uploadWorkerMaxWaitInMinutes;
 	}
@@ -186,7 +214,7 @@ public class ConverterConfiguration
 
 	public Map<String, String> getSpecificColumnMappings()
 	{
-		Map<String, String> res = new HashMap<String, String>();
+		Map<String, String> res = new HashMap<>();
 		for (String key : properties.stringPropertyNames())
 		{
 			if (key.startsWith("TableConverter.specificColumnMapping."))
@@ -223,6 +251,11 @@ public class ConverterConfiguration
 	public boolean isPrimaryKeyDefinitionInsideColumnList()
 	{
 		return getDestinationDatabaseType().isPrimaryKeyDefinitionInsideColumnList();
+	}
+
+	protected Long getMaxRecordsInSingleDeleteStatement()
+	{
+		return maxRecordsInSingleDeleteStatement;
 	}
 
 }

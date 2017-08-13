@@ -9,9 +9,9 @@ import java.util.logging.Logger;
 
 import nl.topicus.spanner.converter.data.DataConverter.Columns;
 
-public class UploadWorker implements Runnable
+public class DeleteWorker implements Runnable
 {
-	private static final Logger log = Logger.getLogger(UploadWorker.class.getName());
+	private static final Logger log = Logger.getLogger(DeleteWorker.class.getName());
 
 	private final String name;
 
@@ -31,14 +31,14 @@ public class UploadWorker implements Runnable
 
 	private int batchSize;
 
-	private String urlSource;
+	private Connection source;
 
 	private String urlDestination;
 
 	private boolean useJdbcBatching;
 
-	UploadWorker(String name, String selectFormat, String sourceTable, String destinationTable, Columns insertCols,
-			Columns selectCols, int beginOffset, int numberOfRecordsToCopy, int batchSize, String urlSource,
+	DeleteWorker(String name, String selectFormat, String sourceTable, String destinationTable, Columns insertCols,
+			Columns selectCols, int beginOffset, int numberOfRecordsToCopy, int batchSize, Connection source,
 			String urlDestination, boolean useJdbcBatching)
 	{
 		this.name = name;
@@ -50,7 +50,7 @@ public class UploadWorker implements Runnable
 		this.beginOffset = beginOffset;
 		this.numberOfRecordsToCopy = numberOfRecordsToCopy;
 		this.batchSize = batchSize;
-		this.urlSource = urlSource;
+		this.source = source;
 		this.urlDestination = urlDestination;
 		this.useJdbcBatching = useJdbcBatching;
 	}
@@ -58,11 +58,10 @@ public class UploadWorker implements Runnable
 	@Override
 	public void run()
 	{
-		try (Connection destination = DriverManager.getConnection(urlDestination);
-				Connection source = DriverManager.getConnection(urlSource))
+		// Connection source = DriverManager.getConnection(urlSource);
+		try (Connection destination = DriverManager.getConnection(urlDestination))
 		{
-			long startTime = System.currentTimeMillis();
-			log.fine(name + ": " + sourceTable + ": Starting copying " + numberOfRecordsToCopy + " records");
+			log.info(name + ": " + sourceTable + ": Starting copying " + numberOfRecordsToCopy + " records");
 
 			destination.setAutoCommit(false);
 			String sql = "INSERT INTO " + destinationTable + " (" + insertCols.getColumnNames() + ") VALUES \n";
@@ -101,23 +100,19 @@ public class UploadWorker implements Runnable
 						statement.executeBatch();
 				}
 				destination.commit();
-				log.fine(name + ": " + sourceTable + ": Records copied so far: " + recordCount + " of "
+				log.info(name + ": " + sourceTable + ": Records copied so far: " + recordCount + " of "
 						+ numberOfRecordsToCopy);
 				currentOffset = currentOffset + batchSize;
 				if (recordCount >= numberOfRecordsToCopy)
 					break;
 			}
-			long endTime = System.currentTimeMillis();
-			log.info("Finished copying " + recordCount + " records for table " + sourceTable + " in "
-					+ (endTime - startTime) + " ms");
-
 		}
 		catch (SQLException e)
 		{
 			log.severe("Error during data copy: " + e.getMessage());
 			throw new RuntimeException(e);
 		}
-		log.fine(name + ": Finished copying");
+		log.info(name + ": Finished copying");
 	}
 
 }

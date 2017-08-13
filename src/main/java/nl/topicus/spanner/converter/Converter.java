@@ -31,8 +31,8 @@ public class Converter
 			}
 			catch (IOException e)
 			{
-				throw new IllegalArgumentException("Unable to find or read config file " + configFile + ": "
-						+ e.getMessage(), e);
+				throw new IllegalArgumentException(
+						"Unable to find or read config file " + configFile + ": " + e.getMessage(), e);
 			}
 		}
 		else
@@ -43,13 +43,15 @@ public class Converter
 		if (config.getTableConvertMode() == ConvertMode.DropAndRecreate)
 		{
 			// Ask for confirmation.
-			if (!confirm("Conversion is running in DropAndRecreate mode for table creation. All existing tables in the destination database will be dropped. Do you want to continue (Y/N)? "))
+			if (!confirm(
+					"Conversion is running in DropAndRecreate mode for table creation. All existing tables in the destination database will be dropped. Do you want to continue (Y/N)? "))
 				return;
 		}
 		if (config.getDataConvertMode() == ConvertMode.DropAndRecreate)
 		{
 			// Ask for confirmation.
-			if (!confirm("Conversion is running in DropAndRecreate mode for data upload. All existing data in the destination tables will be deleted. Do you want to continue (Y/N)? "))
+			if (!confirm(
+					"Conversion is running in DropAndRecreate mode for data upload. All existing data in the destination tables will be deleted. Do you want to continue (Y/N)? "))
 				return;
 		}
 		try (Connection source = DriverManager.getConnection(urlSource);
@@ -76,7 +78,7 @@ public class Converter
 			indexConverter.convert(null, null, true);
 		}
 
-		DataConverter dataConverter = new DataConverter(source, destination, config);
+		DataConverter dataConverter = new DataConverter(config);
 		dataConverter.convert(null, null);
 	}
 
