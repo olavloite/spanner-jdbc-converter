@@ -37,6 +37,10 @@ public class UploadWorker implements Runnable
 
 	private boolean useJdbcBatching;
 
+	private SQLException exception;
+
+	private long recordCount;
+
 	UploadWorker(String name, String selectFormat, String sourceTable, String destinationTable, Columns insertCols,
 			Columns selectCols, int beginOffset, int numberOfRecordsToCopy, int batchSize, String urlSource,
 			String urlDestination, boolean useJdbcBatching)
@@ -110,14 +114,24 @@ public class UploadWorker implements Runnable
 			long endTime = System.currentTimeMillis();
 			log.info("Finished copying " + recordCount + " records for table " + sourceTable + " in "
 					+ (endTime - startTime) + " ms");
-
+			this.recordCount = recordCount;
 		}
 		catch (SQLException e)
 		{
 			log.severe("Error during data copy: " + e.getMessage());
-			throw new RuntimeException(e);
+			exception = new SQLException("Failed to copy table " + sourceTable + " with batch size " + batchSize, e);
 		}
 		log.fine(name + ": Finished copying");
+	}
+
+	public SQLException getException()
+	{
+		return exception;
+	}
+
+	public long getRecordCount()
+	{
+		return recordCount;
 	}
 
 }

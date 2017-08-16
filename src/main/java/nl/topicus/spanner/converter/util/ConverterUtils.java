@@ -7,15 +7,60 @@ import java.sql.Types;
 import java.util.AbstractList;
 import java.util.List;
 
+import nl.topicus.spanner.converter.cfg.ConverterConfiguration;
+import nl.topicus.spanner.converter.cfg.ConverterConfiguration.DatabaseType;
+
 public class ConverterUtils
 {
+	private final ConverterConfiguration config;
+
+	public ConverterUtils(ConverterConfiguration config)
+	{
+		this.config = config;
+	}
+
+	public int calculateActualBatchSize(int numberOfCols, Connection destination, String catalog, String schema,
+			String table) throws SQLException
+	{
+		int actualBatchSize = config.getBatchSize();
+		if (config.getDestinationDatabaseType() == DatabaseType.CloudSpanner)
+		{
+			// Calculate number of rows in a batch based on the row size
+			// Batch size is given as MiB when the destination is CloudSpanner
+			// The maximum number of mutations per commit is 20,000
+			int rowSize = getRowSize(destination, catalog, schema, table);
+			int indices = getNumberOfIndices(destination, catalog, schema, table);
+			actualBatchSize = Math.max(Math.min(config.getBatchSize() / rowSize, 20000 / (numberOfCols + indices)),
+					100);
+		}
+		return actualBatchSize;
+	}
+
+	public int getRowSize(Connection destination, String catalog, String schema, String table) throws SQLException
+	{
+		if (config.getDestinationDatabaseType() == DatabaseType.CloudSpanner)
+			return getEstimatedRowSizeInCloudSpanner(destination, catalog, schema, table, null);
+		return -1;
+	}
+
+	public int getNumberOfIndices(Connection destination, String catalog, String schema, String table)
+			throws SQLException
+	{
+		int count = 0;
+		try (ResultSet indices = destination.getMetaData().getIndexInfo(catalog, schema, table, false, false))
+		{
+			while (indices.next())
+				count++;
+		}
+		return count;
+	}
 
 	/**
 	 * 
 	 * @return The estimated size in bytes of one row of the specified columns
 	 *         of the specified table
 	 */
-	public static int getEstimatedRowSizeInCloudSpanner(Connection connection, String catalog, String schemaPattern,
+	public int getEstimatedRowSizeInCloudSpanner(Connection connection, String catalog, String schemaPattern,
 			String tableNamePattern, String columnNamePattern) throws SQLException
 	{
 		// There's an 8 bytes storage overhead for each column

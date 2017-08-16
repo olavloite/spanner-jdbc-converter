@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -12,7 +13,6 @@ import java.util.logging.Logger;
 
 import nl.topicus.spanner.converter.ConvertMode;
 import nl.topicus.spanner.converter.cfg.ConverterConfiguration;
-import nl.topicus.spanner.converter.cfg.ConverterConfiguration.DatabaseType;
 import nl.topicus.spanner.converter.data.DataConverter.Columns;
 import nl.topicus.spanner.converter.data.DataConverter.Table;
 import nl.topicus.spanner.converter.util.ConverterUtils;
@@ -21,19 +21,24 @@ public class TableListWorker implements Runnable
 {
 	private static final Logger log = Logger.getLogger(TableListWorker.class.getName());
 
-	private String selectFormat = "SELECT $COLUMNS FROM $TABLE ORDER BY $PRIMARY_KEY LIMIT $BATCH_SIZE OFFSET $OFFSET";
-
 	private final ConverterConfiguration config;
+
+	private final ConverterUtils converterUtils;
 
 	private final String catalog;
 
 	private final List<Table> tablesList;
+
+	private SQLException exception;
+
+	private long recordCount;
 
 	TableListWorker(ConverterConfiguration config, String catalog, List<Table> tablesList)
 	{
 		this.config = config;
 		this.catalog = catalog;
 		this.tablesList = tablesList;
+		this.converterUtils = new ConverterUtils(config);
 	}
 
 	@Override
@@ -61,7 +66,7 @@ public class TableListWorker implements Runnable
 		catch (SQLException e)
 		{
 			log.severe("Error during data copy: " + e.getMessage());
-			throw new RuntimeException(e);
+			exception = e;
 		}
 	}
 
@@ -76,24 +81,27 @@ public class TableListWorker implements Runnable
 			log.warning("Table " + tableSpec + " does not have a primary key. No data will be copied.");
 			return;
 		}
-		log.info("About to copy data from table " + tableSpec);
 
-		int batchSize = calculateActualBatchSize(config.getBatchSize(), insertCols.columnNames.size(), destination,
-				catalog, schema, table);
+		int batchSize = converterUtils.calculateActualBatchSize(insertCols.columnNames.size(), destination, catalog,
+				schema, table);
 		int totalRecordCount = DataConverter.getSourceRecordCount(source, tableSpec);
-		int numberOfWorkers = calculateNumberOfWorkers(totalRecordCount);
+		int numberOfWorkers = calculateNumberOfWorkers(totalRecordCount, batchSize);
+		log.info("About to copy " + totalRecordCount + " records from table " + tableSpec + " with batch size "
+				+ batchSize + " and " + numberOfWorkers + " workers");
 		int numberOfRecordsPerWorker = totalRecordCount / numberOfWorkers;
 		if (totalRecordCount % numberOfWorkers > 0)
 			numberOfRecordsPerWorker++;
 		int currentOffset = 0;
 		ExecutorService service = Executors.newFixedThreadPool(numberOfWorkers);
+		List<UploadWorker> workers = new ArrayList<>();
 		for (int workerNumber = 0; workerNumber < numberOfWorkers; workerNumber++)
 		{
 			int workerRecordCount = Math.min(numberOfRecordsPerWorker, totalRecordCount - currentOffset);
-			UploadWorker worker = new UploadWorker("UploadWorker-" + workerNumber, selectFormat, tableSpec, table,
-					insertCols, selectCols, currentOffset, workerRecordCount, batchSize, config.getUrlSource(),
-					config.getUrlDestination(), config.isUseJdbcBatching());
+			UploadWorker worker = new UploadWorker("UploadWorker-" + workerNumber, DataConverter.SELECT_FORMAT,
+					tableSpec, table, insertCols, selectCols, currentOffset, workerRecordCount, batchSize,
+					config.getUrlSource(), config.getUrlDestination(), config.isUseJdbcBatching());
 			service.submit(worker);
+			workers.add(worker);
 			currentOffset = currentOffset + numberOfRecordsPerWorker;
 		}
 		service.shutdown();
@@ -106,22 +114,12 @@ public class TableListWorker implements Runnable
 			log.severe("Error while waiting for workers to finish: " + e.getMessage());
 			throw new RuntimeException(e);
 		}
-
-	}
-
-	private int calculateActualBatchSize(int batchSize, int numberOfCols, Connection destination, String catalog,
-			String schema, String table) throws SQLException
-	{
-		int actualBatchSize = batchSize;
-		if (config.getDestinationDatabaseType() == DatabaseType.CloudSpanner)
+		for (UploadWorker worker : workers)
 		{
-			// Calculate number of rows in a batch based on the row size
-			// Batch size is given as MiB when the destination is CloudSpanner
-			// The maximum number of mutations per commit is 20,000
-			int rowSize = getRowSize(destination, catalog, schema, table);
-			actualBatchSize = Math.min(batchSize / rowSize, 20000 / (numberOfCols + 1));
+			if (worker.getException() != null)
+				throw worker.getException();
+			recordCount += worker.getRecordCount();
 		}
-		return actualBatchSize;
 	}
 
 	private String getTableSpec(String catalog, String schema, String table)
@@ -162,17 +160,20 @@ public class TableListWorker implements Runnable
 		return res;
 	}
 
-	private int getRowSize(Connection destination, String catalog, String schema, String table) throws SQLException
+	private int calculateNumberOfWorkers(int totalRecordCount, int batchSize)
 	{
-		if (config.getDestinationDatabaseType() == DatabaseType.CloudSpanner)
-			return ConverterUtils.getEstimatedRowSizeInCloudSpanner(destination, catalog, schema, table, null);
-		return -1;
+		int res = totalRecordCount / batchSize + 1;
+		return Math.min(res, config.getMaxNumberOfWorkers());
 	}
 
-	private int calculateNumberOfWorkers(int totalRecordCount)
+	public SQLException getException()
 	{
-		int res = totalRecordCount / config.getBatchSize() + 1;
-		return Math.min(res, config.getMaxNumberOfWorkers());
+		return exception;
+	}
+
+	public long getRecordCount()
+	{
+		return recordCount;
 	}
 
 }

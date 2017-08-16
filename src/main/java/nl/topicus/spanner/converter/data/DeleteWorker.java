@@ -5,6 +5,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.logging.Logger;
 
 import nl.topicus.spanner.converter.data.DataConverter.Columns;
@@ -15,42 +16,38 @@ public class DeleteWorker implements Runnable
 
 	private final String name;
 
-	private String selectFormat;
+	private String selectFormat = "SELECT $COLUMNS FROM $TABLE WHERE $WHERE_CLAUSE ORDER BY $PRIMARY_KEY LIMIT $BATCH_SIZE";
 
-	private String sourceTable;
+	private String table;
 
-	private String destinationTable;
+	private Columns columns;
 
-	private Columns insertCols;
+	private List<Object> beginKey;
 
-	private Columns selectCols;
+	private List<Object> endKey;
 
-	private int beginOffset;
-
-	private int numberOfRecordsToCopy;
+	private long numberOfRecordsToDelete;
 
 	private int batchSize;
-
-	private Connection source;
 
 	private String urlDestination;
 
 	private boolean useJdbcBatching;
 
-	DeleteWorker(String name, String selectFormat, String sourceTable, String destinationTable, Columns insertCols,
-			Columns selectCols, int beginOffset, int numberOfRecordsToCopy, int batchSize, Connection source,
-			String urlDestination, boolean useJdbcBatching)
+	private SQLException exception;
+
+	private long recordCount;
+
+	DeleteWorker(String name, String table, Columns columns, List<Object> beginKey, List<Object> endKey,
+			long numberOfRecordsToDelete, int batchSize, String urlDestination, boolean useJdbcBatching)
 	{
 		this.name = name;
-		this.selectFormat = selectFormat;
-		this.sourceTable = sourceTable;
-		this.destinationTable = destinationTable;
-		this.insertCols = insertCols;
-		this.selectCols = selectCols;
-		this.beginOffset = beginOffset;
-		this.numberOfRecordsToCopy = numberOfRecordsToCopy;
+		this.table = table;
+		this.columns = columns;
+		this.beginKey = beginKey;
+		this.endKey = endKey;
+		this.numberOfRecordsToDelete = numberOfRecordsToDelete;
 		this.batchSize = batchSize;
-		this.source = source;
 		this.urlDestination = urlDestination;
 		this.useJdbcBatching = useJdbcBatching;
 	}
@@ -58,36 +55,58 @@ public class DeleteWorker implements Runnable
 	@Override
 	public void run()
 	{
-		// Connection source = DriverManager.getConnection(urlSource);
-		try (Connection destination = DriverManager.getConnection(urlDestination))
+		try (Connection destination = DriverManager.getConnection(urlDestination);
+				Connection selectConnection = DriverManager.getConnection(urlDestination))
 		{
-			log.info(name + ": " + sourceTable + ": Starting copying " + numberOfRecordsToCopy + " records");
+			long startTime = System.currentTimeMillis();
+			log.fine(name + ": " + table + ": Starting deleting " + numberOfRecordsToDelete + " records");
 
+			selectConnection.setReadOnly(true);
 			destination.setAutoCommit(false);
-			String sql = "INSERT INTO " + destinationTable + " (" + insertCols.getColumnNames() + ") VALUES \n";
-			sql = sql + "(" + insertCols.getColumnParameters() + ")";
+
+			boolean first = true;
+			String sql = "DELETE FROM " + table + " WHERE ";
+			for (String col : columns.primaryKeyCols)
+			{
+				if (!first)
+					sql = sql + " AND ";
+				sql = sql + col + "=?";
+				first = false;
+			}
 			PreparedStatement statement = destination.prepareStatement(sql);
 
-			int lastRecord = beginOffset + numberOfRecordsToCopy;
+			int limit = batchSize;
+			String select = selectFormat.replace("$COLUMNS", columns.getPrimaryKeyColumns(table + "."));
+			select = select.replace("$TABLE", table);
+			select = select.replace("$WHERE_CLAUSE", columns.getPrimaryKeyColumnsWhereClause(table + "."));
+			select = select.replace("$PRIMARY_KEY", columns.getPrimaryKeyColumns());
+			select = select.replace("$BATCH_SIZE", String.valueOf(limit));
+			PreparedStatement selectStatement = selectConnection.prepareStatement(select);
+			int paramIndex = 1;
+			for (Object beginKeyValue : beginKey)
+			{
+				selectStatement.setObject(paramIndex, beginKeyValue);
+				paramIndex++;
+			}
+			for (Object endKeyValue : endKey)
+			{
+				selectStatement.setObject(paramIndex, endKeyValue);
+				paramIndex++;
+			}
+
 			int recordCount = 0;
-			int currentOffset = beginOffset;
 			while (true)
 			{
-				int limit = Math.min(batchSize, lastRecord - currentOffset);
-				String select = selectFormat.replace("$COLUMNS", selectCols.getColumnNames());
-				select = select.replace("$TABLE", sourceTable);
-				select = select.replace("$PRIMARY_KEY", selectCols.getPrimaryKeyColumns());
-				select = select.replace("$BATCH_SIZE", String.valueOf(limit));
-				select = select.replace("$OFFSET", String.valueOf(currentOffset));
-				try (ResultSet rs = source.createStatement().executeQuery(select))
+				boolean recordsFound = false;
+				try (ResultSet rs = selectStatement.executeQuery())
 				{
 					while (rs.next())
 					{
-						int index = 1;
-						for (Integer type : insertCols.columnTypes)
+						recordsFound = true;
+						for (int index = 1; index <= columns.primaryKeyCols.size(); index++)
 						{
 							Object object = rs.getObject(index);
-							statement.setObject(index, object, type);
+							statement.setObject(index, object);
 							index++;
 						}
 						if (useJdbcBatching)
@@ -100,19 +119,34 @@ public class DeleteWorker implements Runnable
 						statement.executeBatch();
 				}
 				destination.commit();
-				log.info(name + ": " + sourceTable + ": Records copied so far: " + recordCount + " of "
-						+ numberOfRecordsToCopy);
-				currentOffset = currentOffset + batchSize;
-				if (recordCount >= numberOfRecordsToCopy)
+				log.fine(name + ": " + table + ": Records deleted so far: " + recordCount + " of "
+						+ numberOfRecordsToDelete);
+				if (recordCount >= numberOfRecordsToDelete || !recordsFound)
 					break;
 			}
+			long endTime = System.currentTimeMillis();
+			log.info("Finished deleting " + recordCount + " records for table " + table + " in " + (endTime - startTime)
+					+ " ms");
+			this.recordCount = recordCount;
+			selectConnection.commit();
 		}
-		catch (SQLException e)
+		catch (Exception e)
 		{
-			log.severe("Error during data copy: " + e.getMessage());
-			throw new RuntimeException(e);
+			log.severe("Error during data delete: " + e.toString());
+			exception = new SQLException(
+					"Failed to delete contents of table " + table + " with batch size " + batchSize, e);
 		}
-		log.info(name + ": Finished copying");
+		log.fine(name + ": Finished deleting");
+	}
+
+	public SQLException getException()
+	{
+		return exception;
+	}
+
+	public long getRecordCount()
+	{
+		return recordCount;
 	}
 
 }
