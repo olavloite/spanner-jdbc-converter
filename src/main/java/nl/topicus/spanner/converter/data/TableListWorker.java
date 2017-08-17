@@ -33,6 +33,8 @@ public class TableListWorker implements Runnable
 
 	private long recordCount;
 
+	private long byteCount;
+
 	TableListWorker(ConverterConfiguration config, String catalog, List<Table> tablesList)
 	{
 		this.config = config;
@@ -97,9 +99,9 @@ public class TableListWorker implements Runnable
 		for (int workerNumber = 0; workerNumber < numberOfWorkers; workerNumber++)
 		{
 			int workerRecordCount = Math.min(numberOfRecordsPerWorker, totalRecordCount - currentOffset);
-			UploadWorker worker = new UploadWorker("UploadWorker-" + workerNumber, DataConverter.SELECT_FORMAT,
-					tableSpec, table, insertCols, selectCols, currentOffset, workerRecordCount, batchSize,
-					config.getUrlSource(), config.getUrlDestination(), config.isUseJdbcBatching());
+			UploadWorker worker = new UploadWorker("UploadWorker-" + workerNumber, config, DataConverter.SELECT_FORMAT,
+					catalog, schema, tableSpec, table, insertCols, selectCols, currentOffset, workerRecordCount,
+					batchSize);
 			service.submit(worker);
 			workers.add(worker);
 			currentOffset = currentOffset + numberOfRecordsPerWorker;
@@ -119,6 +121,7 @@ public class TableListWorker implements Runnable
 			if (worker.getException() != null)
 				throw worker.getException();
 			recordCount += worker.getRecordCount();
+			byteCount += worker.getByteCount();
 		}
 	}
 
@@ -174,6 +177,11 @@ public class TableListWorker implements Runnable
 	public long getRecordCount()
 	{
 		return recordCount;
+	}
+
+	public long getByteCount()
+	{
+		return byteCount;
 	}
 
 }

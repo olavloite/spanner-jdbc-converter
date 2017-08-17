@@ -7,15 +7,25 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.logging.Logger;
 
+import nl.topicus.spanner.converter.cfg.ConverterConfiguration;
 import nl.topicus.spanner.converter.data.DataConverter.Columns;
+import nl.topicus.spanner.converter.util.ConverterUtils;
 
 public class UploadWorker implements Runnable
 {
 	private static final Logger log = Logger.getLogger(UploadWorker.class.getName());
 
+	private final ConverterUtils converterUtils;
+
+	private final ConverterConfiguration config;
+
 	private final String name;
 
 	private String selectFormat;
+
+	private String catalog;
+
+	private String schema;
 
 	private String sourceTable;
 
@@ -31,22 +41,22 @@ public class UploadWorker implements Runnable
 
 	private int batchSize;
 
-	private String urlSource;
-
-	private String urlDestination;
-
-	private boolean useJdbcBatching;
-
 	private SQLException exception;
 
 	private long recordCount;
 
-	UploadWorker(String name, String selectFormat, String sourceTable, String destinationTable, Columns insertCols,
-			Columns selectCols, int beginOffset, int numberOfRecordsToCopy, int batchSize, String urlSource,
-			String urlDestination, boolean useJdbcBatching)
+	private long byteCount;
+
+	UploadWorker(String name, ConverterConfiguration config, String selectFormat, String catalog, String schema,
+			String sourceTable, String destinationTable, Columns insertCols, Columns selectCols, int beginOffset,
+			int numberOfRecordsToCopy, int batchSize)
 	{
+		this.converterUtils = new ConverterUtils(config);
+		this.config = config;
 		this.name = name;
 		this.selectFormat = selectFormat;
+		this.catalog = catalog;
+		this.schema = schema;
 		this.sourceTable = sourceTable;
 		this.destinationTable = destinationTable;
 		this.insertCols = insertCols;
@@ -54,16 +64,13 @@ public class UploadWorker implements Runnable
 		this.beginOffset = beginOffset;
 		this.numberOfRecordsToCopy = numberOfRecordsToCopy;
 		this.batchSize = batchSize;
-		this.urlSource = urlSource;
-		this.urlDestination = urlDestination;
-		this.useJdbcBatching = useJdbcBatching;
 	}
 
 	@Override
 	public void run()
 	{
-		try (Connection destination = DriverManager.getConnection(urlDestination);
-				Connection source = DriverManager.getConnection(urlSource))
+		try (Connection destination = DriverManager.getConnection(config.getUrlDestination());
+				Connection source = DriverManager.getConnection(config.getUrlSource()))
 		{
 			long startTime = System.currentTimeMillis();
 			log.fine(name + ": " + sourceTable + ": Starting copying " + numberOfRecordsToCopy + " records");
@@ -73,6 +80,7 @@ public class UploadWorker implements Runnable
 			sql = sql + "(" + insertCols.getColumnParameters() + ")";
 			PreparedStatement statement = destination.prepareStatement(sql);
 
+			int rowSize = converterUtils.getRowSize(destination, catalog, schema, destinationTable);
 			int lastRecord = beginOffset + numberOfRecordsToCopy;
 			int recordCount = 0;
 			int currentOffset = beginOffset;
@@ -95,13 +103,14 @@ public class UploadWorker implements Runnable
 							statement.setObject(index, object, type);
 							index++;
 						}
-						if (useJdbcBatching)
+						if (config.isUseJdbcBatching())
 							statement.addBatch();
 						else
 							statement.executeUpdate();
 						recordCount++;
+						byteCount += rowSize;
 					}
-					if (useJdbcBatching)
+					if (config.isUseJdbcBatching())
 						statement.executeBatch();
 				}
 				destination.commit();
@@ -112,8 +121,8 @@ public class UploadWorker implements Runnable
 					break;
 			}
 			long endTime = System.currentTimeMillis();
-			log.info("Finished copying " + recordCount + " records for table " + sourceTable + " in "
-					+ (endTime - startTime) + " ms");
+			log.info("Finished copying " + recordCount + " records (" + byteCount + " bytes) for table " + sourceTable
+					+ " in " + (endTime - startTime) + " ms");
 			this.recordCount = recordCount;
 		}
 		catch (SQLException e)
@@ -132,6 +141,11 @@ public class UploadWorker implements Runnable
 	public long getRecordCount()
 	{
 		return recordCount;
+	}
+
+	public long getByteCount()
+	{
+		return byteCount;
 	}
 
 }

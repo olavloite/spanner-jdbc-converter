@@ -26,6 +26,10 @@ public class DataConverter
 
 	private final ConverterUtils converterUtils;
 
+	private long recordCount;
+
+	private long byteCount;
+
 	static final class Table
 	{
 		final String schema;
@@ -112,6 +116,8 @@ public class DataConverter
 
 	public void convert(String catalog, String schema) throws SQLException
 	{
+		recordCount = 0;
+		byteCount = 0;
 		try (Connection source = DriverManager.getConnection(config.getUrlSource());
 				Connection destination = DriverManager.getConnection(config.getUrlDestination()))
 		{
@@ -143,16 +149,16 @@ public class DataConverter
 			List<List<Table>> partionedTables = ConverterUtils.partition(tablesList, tablesPerWorker);
 
 			long beginTime = System.currentTimeMillis();
-			long recordCount = convertListOfTables(catalog, partionedTables);
+			convertListOfTables(catalog, partionedTables);
 			long endTime = System.currentTimeMillis();
-			log.info("Finished converting " + recordCount + " records in " + (endTime - beginTime) + " ms");
+			log.info("Finished converting " + recordCount + " records (" + byteCount + " bytes) in "
+					+ (endTime - beginTime) + " ms");
 			source.commit();
 		}
 	}
 
-	private long convertListOfTables(String catalog, List<List<Table>> partionedTables) throws SQLException
+	private void convertListOfTables(String catalog, List<List<Table>> partionedTables) throws SQLException
 	{
-		long recordCount = 0;
 		List<TableListWorker> workers = new ArrayList<>();
 		ExecutorService service = Executors.newFixedThreadPool(config.getNumberOfTableWorkers());
 		for (List<Table> tables : partionedTables)
@@ -176,8 +182,8 @@ public class DataConverter
 			if (worker.getException() != null)
 				throw worker.getException();
 			recordCount += worker.getRecordCount();
+			byteCount += worker.getByteCount();
 		}
-		return recordCount;
 	}
 
 	static int getSourceRecordCount(Connection source, String tableSpec) throws SQLException
