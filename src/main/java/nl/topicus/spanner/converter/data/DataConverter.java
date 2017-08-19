@@ -5,7 +5,6 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -29,84 +28,6 @@ public class DataConverter
 	private long recordCount;
 
 	private long byteCount;
-
-	static final class Table
-	{
-		final String schema;
-
-		final String name;
-
-		Table(String schema, String name)
-		{
-			this.schema = schema;
-			this.name = name;
-		}
-
-		@Override
-		public String toString()
-		{
-			return schema + "." + name;
-		}
-	}
-
-	static final class Columns
-	{
-		List<String> columnNames = new ArrayList<>();
-
-		List<Integer> columnTypes = new ArrayList<>();
-
-		List<String> primaryKeyCols = new ArrayList<>();
-
-		String getColumnNames()
-		{
-			return String.join(", ", columnNames);
-		}
-
-		String getPrimaryKeyColumns()
-		{
-			return String.join(", ", primaryKeyCols);
-		}
-
-		String getPrimaryKeyColumnsWhereClause(String prefix)
-		{
-			List<String> res = new ArrayList<>(primaryKeyCols.size() * 2);
-			for (String s : primaryKeyCols)
-			{
-				res.add(prefix + s + ">=?");
-			}
-			for (String s : primaryKeyCols)
-			{
-				res.add(prefix + s + "<=?");
-			}
-			return String.join(" AND ", res);
-		}
-
-		String getPrimaryKeyColumns(String prefix)
-		{
-			List<String> res = new ArrayList<>(primaryKeyCols.size());
-			for (String pk : primaryKeyCols)
-				res.add(prefix + pk);
-			return String.join(", ", res);
-		}
-
-		String getColumnParameters()
-		{
-			String[] params = new String[columnNames.size()];
-			Arrays.fill(params, "?");
-			return String.join(", ", params);
-		}
-
-		int getColumnIndex(String columnName)
-		{
-			return columnNames.indexOf(columnName);
-		}
-
-		Integer getColumnType(String columnName)
-		{
-			int index = getColumnIndex(columnName);
-			return index == -1 ? null : columnTypes.get(index);
-		}
-	}
 
 	public DataConverter(ConverterConfiguration config)
 	{
@@ -238,7 +159,7 @@ public class DataConverter
 		String selectFormat = "SELECT $COLUMNS FROM $TABLE ORDER BY $PRIMARY_KEY LIMIT 1 OFFSET $OFFSET";
 		int numberOfWorkers = config.getMaxNumberOfWorkers();
 		int batchSize = converterUtils.calculateActualBatchSize(1, destination, catalog, schema, table);
-		long numberOfRecordsPerWorker = recordCount / numberOfWorkers;
+		long numberOfRecordsPerWorker = recordCount / numberOfWorkers + 1;
 		log.info("Deleting: Number of workers: " + numberOfWorkers + "; Batch size: " + batchSize
 				+ "; Number of records per worker: " + numberOfRecordsPerWorker);
 		long currentOffset = 0;

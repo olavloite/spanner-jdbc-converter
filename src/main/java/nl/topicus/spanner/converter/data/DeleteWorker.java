@@ -8,8 +8,6 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.logging.Logger;
 
-import nl.topicus.spanner.converter.data.DataConverter.Columns;
-
 public class DeleteWorker implements Runnable
 {
 	private static final Logger log = Logger.getLogger(DeleteWorker.class.getName());

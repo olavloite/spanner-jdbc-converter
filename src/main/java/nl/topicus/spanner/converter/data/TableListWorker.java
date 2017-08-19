@@ -13,8 +13,6 @@ import java.util.logging.Logger;
 
 import nl.topicus.spanner.converter.ConvertMode;
 import nl.topicus.spanner.converter.cfg.ConverterConfiguration;
-import nl.topicus.spanner.converter.data.DataConverter.Columns;
-import nl.topicus.spanner.converter.data.DataConverter.Table;
 import nl.topicus.spanner.converter.util.ConverterUtils;
 
 public class TableListWorker implements Runnable
@@ -100,8 +98,7 @@ public class TableListWorker implements Runnable
 		{
 			int workerRecordCount = Math.min(numberOfRecordsPerWorker, totalRecordCount - currentOffset);
 			UploadWorker worker = new UploadWorker("UploadWorker-" + workerNumber, config, DataConverter.SELECT_FORMAT,
-					catalog, schema, tableSpec, table, insertCols, selectCols, currentOffset, workerRecordCount,
-					batchSize);
+					tableSpec, table, insertCols, selectCols, currentOffset, workerRecordCount, batchSize);
 			service.submit(worker);
 			workers.add(worker);
 			currentOffset = currentOffset + numberOfRecordsPerWorker;

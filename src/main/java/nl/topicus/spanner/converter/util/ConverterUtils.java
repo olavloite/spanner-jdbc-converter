@@ -7,6 +7,8 @@ import java.sql.Types;
 import java.util.AbstractList;
 import java.util.List;
 
+import com.google.cloud.ByteArray;
+
 import nl.topicus.spanner.converter.cfg.ConverterConfiguration;
 import nl.topicus.spanner.converter.cfg.ConverterConfiguration.DatabaseType;
 
@@ -101,6 +103,42 @@ public class ConverterUtils
 			}
 		}
 		return totalSize;
+	}
+
+	public int getActualDataSize(int colType, Object data)
+	{
+		int size = 0;
+		switch (colType)
+		{
+		case Types.ARRAY:
+			break;
+		case Types.BOOLEAN:
+			size = 1;
+			break;
+		case Types.BINARY:
+			if (data != null && byte[].class.equals(data.getClass()))
+				size = ((byte[]) data).length;
+			else if (data != null && ByteArray.class.equals(data))
+				size = ((ByteArray) data).length();
+			break;
+		case Types.DATE:
+			size = 4;
+			break;
+		case Types.DOUBLE:
+			size = 8;
+			break;
+		case Types.BIGINT:
+			size = 8;
+			break;
+		case Types.NVARCHAR:
+			if (data != null && String.class.equals(data.getClass()))
+				size = ((String) data).getBytes().length;
+			break;
+		case Types.TIMESTAMP:
+			size = 12;
+			break;
+		}
+		return size;
 	}
 
 	public static <T> List<List<T>> partition(final List<T> list, final int size)

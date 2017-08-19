@@ -8,7 +8,6 @@ import java.sql.SQLException;
 import java.util.logging.Logger;
 
 import nl.topicus.spanner.converter.cfg.ConverterConfiguration;
-import nl.topicus.spanner.converter.data.DataConverter.Columns;
 import nl.topicus.spanner.converter.util.ConverterUtils;
 
 public class UploadWorker implements Runnable
@@ -22,10 +21,6 @@ public class UploadWorker implements Runnable
 	private final String name;
 
 	private String selectFormat;
-
-	private String catalog;
-
-	private String schema;
 
 	private String sourceTable;
 
@@ -47,16 +42,14 @@ public class UploadWorker implements Runnable
 
 	private long byteCount;
 
-	UploadWorker(String name, ConverterConfiguration config, String selectFormat, String catalog, String schema,
-			String sourceTable, String destinationTable, Columns insertCols, Columns selectCols, int beginOffset,
-			int numberOfRecordsToCopy, int batchSize)
+	UploadWorker(String name, ConverterConfiguration config, String selectFormat, String sourceTable,
+			String destinationTable, Columns insertCols, Columns selectCols, int beginOffset, int numberOfRecordsToCopy,
+			int batchSize)
 	{
 		this.converterUtils = new ConverterUtils(config);
 		this.config = config;
 		this.name = name;
 		this.selectFormat = selectFormat;
-		this.catalog = catalog;
-		this.schema = schema;
 		this.sourceTable = sourceTable;
 		this.destinationTable = destinationTable;
 		this.insertCols = insertCols;
@@ -80,7 +73,6 @@ public class UploadWorker implements Runnable
 			sql = sql + "(" + insertCols.getColumnParameters() + ")";
 			PreparedStatement statement = destination.prepareStatement(sql);
 
-			int rowSize = converterUtils.getRowSize(destination, catalog, schema, destinationTable);
 			int lastRecord = beginOffset + numberOfRecordsToCopy;
 			int recordCount = 0;
 			int currentOffset = beginOffset;
@@ -101,6 +93,7 @@ public class UploadWorker implements Runnable
 						{
 							Object object = rs.getObject(index);
 							statement.setObject(index, object, type);
+							byteCount += converterUtils.getActualDataSize(type, object);
 							index++;
 						}
 						if (config.isUseJdbcBatching())
@@ -108,7 +101,6 @@ public class UploadWorker implements Runnable
 						else
 							statement.executeUpdate();
 						recordCount++;
-						byteCount += rowSize;
 					}
 					if (config.isUseJdbcBatching())
 						statement.executeBatch();
