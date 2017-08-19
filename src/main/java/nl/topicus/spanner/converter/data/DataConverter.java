@@ -159,7 +159,7 @@ public class DataConverter
 		String selectFormat = "SELECT $COLUMNS FROM $TABLE ORDER BY $PRIMARY_KEY LIMIT 1 OFFSET $OFFSET";
 		int numberOfWorkers = config.getMaxNumberOfWorkers();
 		int batchSize = converterUtils.calculateActualBatchSize(1, destination, catalog, schema, table);
-		long numberOfRecordsPerWorker = recordCount / numberOfWorkers + 1;
+		long numberOfRecordsPerWorker = recordCount / numberOfWorkers;
 		log.info("Deleting: Number of workers: " + numberOfWorkers + "; Batch size: " + batchSize
 				+ "; Number of records per worker: " + numberOfRecordsPerWorker);
 		long currentOffset = 0;
@@ -202,7 +202,7 @@ public class DataConverter
 				}
 			}
 
-			long workerRecordCount = Math.min(numberOfRecordsPerWorker, recordCount - currentOffset);
+			long workerRecordCount = Math.max(numberOfRecordsPerWorker, recordCount - currentOffset);
 			DeleteWorker worker = new DeleteWorker("DeleteWorker-" + workerNumber, table, columns, beginKey, endKey,
 					workerRecordCount, batchSize, config.getUrlDestination(), config.isUseJdbcBatching());
 			workers.add(worker);
