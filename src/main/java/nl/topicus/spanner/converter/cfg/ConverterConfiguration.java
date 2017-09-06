@@ -179,7 +179,7 @@ public class ConverterConfiguration
 	{
 		if (batchSize == null)
 		{
-			batchSize = Integer.valueOf(properties.getProperty("DataConverter.batchSize", "1000"));
+			batchSize = Integer.valueOf(properties.getProperty("DataConverter.batchSize", "1500000"));
 		}
 		return batchSize;
 	}
