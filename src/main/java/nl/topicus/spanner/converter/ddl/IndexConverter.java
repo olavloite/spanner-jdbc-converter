@@ -42,8 +42,8 @@ public class IndexConverter
 				if (!config.getDestinationDatabaseType().isSystemSchema(tableSchema))
 				{
 					String table = tables.getString("TABLE_NAME");
-					try (ResultSet indices = destination.getMetaData()
-							.getIndexInfo(catalog, schema, table, false, true))
+					try (ResultSet indices = destination.getMetaData().getIndexInfo(catalog, schema, table, false,
+							true))
 					{
 						while (indices.next())
 						{
@@ -78,12 +78,13 @@ public class IndexConverter
 		}
 	}
 
-	public String convert(String catalog, String schema, boolean create) throws SQLException
+	public String convert(boolean create) throws SQLException
 	{
 		StringBuilder sql = new StringBuilder();
-		initializeExistingIndices(catalog, schema);
-		initializePrimaryKeys(catalog, schema);
-		try (ResultSet tbls = source.getMetaData().getTables(catalog, schema, null, new String[] { "TABLE" }))
+		initializeExistingIndices(config.getCatalog(), config.getSchema());
+		initializePrimaryKeys(config.getCatalog(), config.getSchema());
+		try (ResultSet tbls = source.getMetaData().getTables(config.getCatalog(), config.getSchema(), null,
+				new String[] { "TABLE" }))
 		{
 			while (tbls.next())
 			{
@@ -91,8 +92,8 @@ public class IndexConverter
 				if (!config.getSourceDatabaseType().isSystemSchema(tableSchema))
 				{
 					String table = tbls.getString("TABLE_NAME");
-					try (ResultSet indices = source.getMetaData()
-							.getIndexInfo(catalog, tableSchema, table, false, true))
+					try (ResultSet indices = source.getMetaData().getIndexInfo(config.getCatalog(), tableSchema, table,
+							false, true))
 					{
 						while (indices.next())
 						{
@@ -113,7 +114,8 @@ public class IndexConverter
 								if (definition != null)
 								{
 									sql.append(definition).append("\n;\n\n");
-									sql.append("/*---------------------------------------------------------------------*/\n");
+									sql.append(
+											"/*---------------------------------------------------------------------*/\n");
 									if (create)
 									{
 										log.info("Creating index " + indexName);

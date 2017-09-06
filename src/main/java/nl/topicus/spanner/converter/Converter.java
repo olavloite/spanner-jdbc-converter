@@ -7,7 +7,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 
 import nl.topicus.spanner.converter.cfg.ConverterConfiguration;
-import nl.topicus.spanner.converter.data.DataConverter;
+import nl.topicus.spanner.converter.data.DataCopier;
 import nl.topicus.spanner.converter.ddl.IndexConverter;
 import nl.topicus.spanner.converter.ddl.TableConverter;
 
@@ -72,14 +72,14 @@ public class Converter
 		if (config.getTableConvertMode() != ConvertMode.SkipAll)
 		{
 			TableConverter tableConverter = new TableConverter(source, destination, config);
-			tableConverter.convert(null, null, true);
+			tableConverter.convert(true);
 
 			IndexConverter indexConverter = new IndexConverter(source, destination, config);
-			indexConverter.convert(null, null, true);
+			indexConverter.convert(true);
 		}
 
-		DataConverter dataConverter = new DataConverter(config);
-		dataConverter.convert(null, null);
+		DataCopier dataConverter = new DataCopier(config);
+		dataConverter.convert();
 	}
 
 	private static boolean confirm(String msg)

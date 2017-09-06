@@ -11,6 +11,7 @@ import com.google.cloud.ByteArray;
 
 import nl.topicus.spanner.converter.cfg.ConverterConfiguration;
 import nl.topicus.spanner.converter.cfg.ConverterConfiguration.DatabaseType;
+import nl.topicus.spanner.converter.data.Columns;
 
 public class ConverterUtils
 {
@@ -139,6 +140,69 @@ public class ConverterUtils
 			break;
 		}
 		return size;
+	}
+
+	public String getTableSpec(String catalog, String schema, String table)
+	{
+		String tableSpec = "";
+		if (catalog != null && !"".equals(catalog))
+			tableSpec = tableSpec + catalog + ".";
+		if (schema != null && !"".equals(schema) && !"public".equals(schema))
+			tableSpec = tableSpec + schema + ".";
+		tableSpec = tableSpec + table;
+
+		return tableSpec;
+	}
+
+	public Columns getColumns(Connection destination, String catalog, String schema, String table, boolean forSelect)
+			throws SQLException
+	{
+		Columns res = new Columns();
+		try (ResultSet columns = destination.getMetaData().getColumns(catalog, schema, table, null))
+		{
+			while (columns.next())
+			{
+				// When doing a select and a column is named the same as the
+				// table, Cloud Spanner will misinterpret the query. In those
+				// cases, the column name will be prefixed by the table name
+				res.addColumn(forSelect && columns.getString("COLUMN_NAME").equalsIgnoreCase(table)
+						? table + "." + columns.getString("COLUMN_NAME") : columns.getString("COLUMN_NAME"));
+				res.addColumnType(columns.getInt("DATA_TYPE"));
+			}
+		}
+		try (ResultSet keys = destination.getMetaData().getPrimaryKeys(catalog, schema, table))
+		{
+			while (keys.next())
+			{
+				res.addPrimaryKeyColumn(keys.getString("COLUMN_NAME"));
+			}
+		}
+		return res;
+	}
+
+	public int getSourceRecordCount(Connection source, String tableSpec) throws SQLException
+	{
+		try (ResultSet count = source.createStatement().executeQuery("SELECT COUNT(*) FROM " + tableSpec))
+		{
+			if (count.next())
+				return count.getInt(1);
+		}
+		return 0;
+	}
+
+	public long getDestinationRecordCount(Connection destination, String table) throws SQLException
+	{
+		String sql = "select count(*) from " + table;
+		try (ResultSet rs = destination.createStatement().executeQuery(sql))
+		{
+			if (rs.next())
+				return rs.getLong(1);
+		}
+		finally
+		{
+			destination.commit();
+		}
+		return 0;
 	}
 
 	public static <T> List<List<T>> partition(final List<T> list, final int size)

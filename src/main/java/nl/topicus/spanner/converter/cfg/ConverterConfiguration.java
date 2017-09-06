@@ -98,7 +98,12 @@ public class ConverterConfiguration
 	private Integer maxNumberOfWorkers;
 
 	/**
-	 * Maximum time to wait for a worker to finish in minutes
+	 * Maximum time to wait for a table worker to finish in minutes
+	 */
+	private Integer tableWorkerMaxWaitInMinutes;
+
+	/**
+	 * Maximum time to wait for an upload worker to finish in minutes
 	 */
 	private Integer uploadWorkerMaxWaitInMinutes;
 
@@ -107,6 +112,10 @@ public class ConverterConfiguration
 	private final String urlSource;
 
 	private final String urlDestination;
+
+	private String catalog;
+
+	private String schema;
 
 	/**
 	 * Cloud Spanner has a strict limit on the size of one transaction. When
@@ -193,6 +202,16 @@ public class ConverterConfiguration
 		return maxNumberOfWorkers;
 	}
 
+	public Integer getTableWorkerMaxWaitInMinutes()
+	{
+		if (tableWorkerMaxWaitInMinutes == null)
+		{
+			tableWorkerMaxWaitInMinutes = Integer
+					.valueOf(properties.getProperty("DataConverter.tableWorkerMaxWaitInMinutes", "60"));
+		}
+		return tableWorkerMaxWaitInMinutes;
+	}
+
 	public Integer getUploadWorkerMaxWaitInMinutes()
 	{
 		if (uploadWorkerMaxWaitInMinutes == null)
@@ -210,6 +229,24 @@ public class ConverterConfiguration
 			useJdbcBatching = Boolean.valueOf(properties.getProperty("DataConverter.useJdbcBatching", "true"));
 		}
 		return useJdbcBatching.booleanValue();
+	}
+
+	public String getCatalog()
+	{
+		if (catalog == null)
+		{
+			catalog = properties.getProperty("catalog", null);
+		}
+		return catalog;
+	}
+
+	public String getSchema()
+	{
+		if (schema == null)
+		{
+			schema = properties.getProperty("schema", null);
+		}
+		return schema;
 	}
 
 	public Map<String, String> getSpecificColumnMappings()

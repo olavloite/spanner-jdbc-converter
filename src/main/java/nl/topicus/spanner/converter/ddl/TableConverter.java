@@ -144,11 +144,12 @@ public class TableConverter
 		}
 	}
 
-	public String convert(String catalog, String schema, boolean create) throws SQLException
+	public String convert(boolean create) throws SQLException
 	{
 		StringBuilder sql = new StringBuilder();
-		initializeExistingTables(catalog, schema);
-		try (ResultSet tables = source.getMetaData().getTables(catalog, schema, null, new String[] { "TABLE" }))
+		initializeExistingTables(config.getCatalog(), config.getSchema());
+		try (ResultSet tables = source.getMetaData().getTables(config.getCatalog(), config.getSchema(), null,
+				new String[] { "TABLE" }))
 		{
 			while (tables.next())
 			{

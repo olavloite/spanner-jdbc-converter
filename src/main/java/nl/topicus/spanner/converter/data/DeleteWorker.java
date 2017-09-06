@@ -8,15 +8,13 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.logging.Logger;
 
-public class DeleteWorker implements Runnable
+import nl.topicus.spanner.converter.cfg.ConverterConfiguration;
+
+public class DeleteWorker extends AbstractTablePartWorker
 {
 	private static final Logger log = Logger.getLogger(DeleteWorker.class.getName());
 
-	private final String name;
-
 	private String selectFormat = "SELECT $COLUMNS FROM $TABLE WHERE $WHERE_CLAUSE ORDER BY $PRIMARY_KEY LIMIT $BATCH_SIZE";
-
-	private String table;
 
 	private Columns columns;
 
@@ -28,43 +26,32 @@ public class DeleteWorker implements Runnable
 
 	private int batchSize;
 
-	private String urlDestination;
-
-	private boolean useJdbcBatching;
-
-	private SQLException exception;
-
 	private long recordCount;
 
-	DeleteWorker(String name, String table, Columns columns, List<Object> beginKey, List<Object> endKey,
-			long numberOfRecordsToDelete, int batchSize, String urlDestination, boolean useJdbcBatching)
+	DeleteWorker(ConverterConfiguration config, String table, Columns columns, List<Object> beginKey,
+			List<Object> endKey, long numberOfRecordsToDelete, int batchSize)
 	{
-		this.name = name;
-		this.table = table;
+		super(config, table, numberOfRecordsToDelete);
 		this.columns = columns;
 		this.beginKey = beginKey;
 		this.endKey = endKey;
 		this.numberOfRecordsToDelete = numberOfRecordsToDelete;
 		this.batchSize = batchSize;
-		this.urlDestination = urlDestination;
-		this.useJdbcBatching = useJdbcBatching;
 	}
 
 	@Override
-	public void run()
+	public void run() throws SQLException
 	{
-		try (Connection destination = DriverManager.getConnection(urlDestination);
-				Connection selectConnection = DriverManager.getConnection(urlDestination))
+		try (Connection destination = DriverManager.getConnection(config.getUrlDestination());
+				Connection selectConnection = DriverManager.getConnection(config.getUrlDestination()))
 		{
-			long startTime = System.currentTimeMillis();
-			log.fine(name + ": " + table + ": Starting deleting " + numberOfRecordsToDelete + " records");
-
+			log.fine(table + ": Starting deleting " + numberOfRecordsToDelete + " records");
 			selectConnection.setReadOnly(true);
 			destination.setAutoCommit(false);
 
 			boolean first = true;
 			String sql = "DELETE FROM " + table + " WHERE ";
-			for (String col : columns.primaryKeyCols)
+			for (String col : columns.getPrimaryKeyCols())
 			{
 				if (!first)
 					sql = sql + " AND ";
@@ -101,50 +88,41 @@ public class DeleteWorker implements Runnable
 					while (rs.next())
 					{
 						recordsFound = true;
-						for (int index = 1; index <= columns.primaryKeyCols.size(); index++)
+						for (int index = 1; index <= columns.getPrimaryKeyCols().size(); index++)
 						{
 							Object object = rs.getObject(index);
 							statement.setObject(index, object);
 							index++;
 						}
-						if (useJdbcBatching)
+						if (config.isUseJdbcBatching())
 							statement.addBatch();
 						else
 							statement.executeUpdate();
 						recordCount++;
 					}
-					if (useJdbcBatching)
+					if (config.isUseJdbcBatching())
 						statement.executeBatch();
 				}
 				destination.commit();
-				log.fine(name + ": " + table + ": Records deleted so far: " + recordCount + " of "
-						+ numberOfRecordsToDelete);
+				log.fine(table + ": Records deleted so far: " + recordCount + " of " + numberOfRecordsToDelete);
 				if (recordCount >= numberOfRecordsToDelete || !recordsFound)
 					break;
 			}
-			long endTime = System.currentTimeMillis();
-			log.info("Finished deleting " + recordCount + " records for table " + table + " in " + (endTime - startTime)
-					+ " ms");
 			this.recordCount = recordCount;
 			selectConnection.commit();
 		}
-		catch (Exception e)
-		{
-			log.severe("Error during data delete: " + e.toString());
-			exception = new SQLException(
-					"Failed to delete contents of table " + table + " with batch size " + batchSize, e);
-		}
-		log.fine(name + ": Finished deleting");
-	}
-
-	public SQLException getException()
-	{
-		return exception;
+		log.fine(table + ": Finished deleting");
 	}
 
 	public long getRecordCount()
 	{
 		return recordCount;
+	}
+
+	@Override
+	protected long getByteCount()
+	{
+		return 0;
 	}
 
 }

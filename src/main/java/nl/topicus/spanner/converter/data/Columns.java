@@ -4,25 +4,40 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-final class Columns
+public final class Columns
 {
-	List<String> columnNames = new ArrayList<>();
+	private List<String> columns = new ArrayList<>();
 
-	List<Integer> columnTypes = new ArrayList<>();
+	private List<Integer> columnTypes = new ArrayList<>();
 
-	List<String> primaryKeyCols = new ArrayList<>();
+	private List<String> primaryKeyCols = new ArrayList<>();
 
-	String getColumnNames()
+	public void addColumn(String name)
 	{
-		return String.join(", ", columnNames);
+		columns.add(name);
 	}
 
-	String getPrimaryKeyColumns()
+	public void addColumnType(Integer type)
+	{
+		columnTypes.add(type);
+	}
+
+	public void addPrimaryKeyColumn(String name)
+	{
+		primaryKeyCols.add(name);
+	}
+
+	public String getColumnNames()
+	{
+		return String.join(", ", columns);
+	}
+
+	public String getPrimaryKeyColumns()
 	{
 		return String.join(", ", primaryKeyCols);
 	}
 
-	String getPrimaryKeyColumnsWhereClause(String prefix)
+	public String getPrimaryKeyColumnsWhereClause(String prefix)
 	{
 		List<String> res = new ArrayList<>(primaryKeyCols.size() * 2);
 		for (String s : primaryKeyCols)
@@ -36,7 +51,7 @@ final class Columns
 		return String.join(" AND ", res);
 	}
 
-	String getPrimaryKeyColumns(String prefix)
+	public String getPrimaryKeyColumns(String prefix)
 	{
 		List<String> res = new ArrayList<>(primaryKeyCols.size());
 		for (String pk : primaryKeyCols)
@@ -44,21 +59,36 @@ final class Columns
 		return String.join(", ", res);
 	}
 
-	String getColumnParameters()
+	public String getColumnParameters()
 	{
-		String[] params = new String[columnNames.size()];
+		String[] params = new String[columns.size()];
 		Arrays.fill(params, "?");
 		return String.join(", ", params);
 	}
 
-	int getColumnIndex(String columnName)
+	public int getColumnIndex(String columnName)
 	{
-		return columnNames.indexOf(columnName);
+		return columns.indexOf(columnName);
 	}
 
-	Integer getColumnType(String columnName)
+	public Integer getColumnType(String columnName)
 	{
 		int index = getColumnIndex(columnName);
 		return index == -1 ? null : columnTypes.get(index);
+	}
+
+	public List<Integer> getColumnTypes()
+	{
+		return columnTypes;
+	}
+
+	public List<String> getPrimaryKeyCols()
+	{
+		return primaryKeyCols;
+	}
+
+	public List<String> getColumns()
+	{
+		return columns;
 	}
 }
