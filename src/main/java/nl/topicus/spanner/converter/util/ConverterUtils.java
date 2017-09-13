@@ -7,8 +7,7 @@ import java.sql.Types;
 import java.util.AbstractList;
 import java.util.List;
 
-import com.google.cloud.ByteArray;
-
+import nl.topicus.jdbc.shaded.com.google.cloud.ByteArray;
 import nl.topicus.spanner.converter.cfg.ConverterConfiguration;
 import nl.topicus.spanner.converter.cfg.ConverterConfiguration.DatabaseType;
 import nl.topicus.spanner.converter.data.Columns;
