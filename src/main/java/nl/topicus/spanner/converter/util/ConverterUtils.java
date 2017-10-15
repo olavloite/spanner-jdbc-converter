@@ -58,7 +58,16 @@ public class ConverterUtils
 	}
 
 	/**
-	 * 
+	 * @param connection
+	 *            The connection to use to estimate the row size
+	 * @param catalog
+	 *            The catalog of the table
+	 * @param schemaPattern
+	 *            The schema of the table
+	 * @param tableNamePattern
+	 *            The name of the table
+	 * @param columnNamePattern
+	 *            The name of the column(s) to check
 	 * @return The estimated size in bytes of one row of the specified columns
 	 *         of the specified table
 	 */
