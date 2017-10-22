@@ -41,7 +41,14 @@
 		<dependency>
 			<groupId>nl.topicus</groupId>
 			<artifactId>spanner-jdbc</artifactId>
-			<version>0.16</version>
+			<version>0.19</version>
+			<classifier>shaded</classifier>
+		</dependency>
+		<dependency>
+			<groupId>nl.topicus</groupId>
+			<artifactId>spanner-jdbc</artifactId>
+			<version>0.19</version>
+			<classifier>shaded-sources</classifier>
 		</dependency>
 		<dependency>
 			<groupId>postgresql</groupId>
