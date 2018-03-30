@@ -53,7 +53,7 @@ public class CloudSpannerTableWorker extends AbstractTableWorker
 		while (hasResults)
 		{
 			ResultSet rs = statement.getResultSet();
-			PartitionWorker worker = new PartitionWorker("UploadWorker-" + workerNumber, config, rs, tableSpec, table,
+			PartitionWorker worker = new PartitionWorker("PartionWorker-" + workerNumber, config, rs, tableSpec, table,
 					insertCols);
 			workers.add(worker);
 			hasResults = statement.getMoreResults(Statement.KEEP_CURRENT_RESULT);
