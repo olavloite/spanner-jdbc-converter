@@ -13,14 +13,17 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
+import nl.topicus.jdbc.ICloudSpannerConnection;
 import nl.topicus.spanner.converter.ConvertMode;
 import nl.topicus.spanner.converter.cfg.ConverterConfiguration;
+import nl.topicus.spanner.converter.cfg.ConverterConfiguration.DatabaseType;
 
 public class DataCopier
 {
 	private static final Logger log = Logger.getLogger(DataCopier.class.getName());
 
 	public static final String SELECT_FORMAT = "SELECT $COLUMNS FROM $TABLE ORDER BY $PRIMARY_KEY LIMIT $BATCH_SIZE OFFSET $OFFSET";
+	public static final String CLOUD_SPANNER_SELECT_FORMAT = "SELECT $COLUMNS FROM $TABLE";
 
 	private final ConverterConfiguration config;
 
@@ -30,7 +33,7 @@ public class DataCopier
 
 	private List<TablePreparer> deletePreparers = new ArrayList<>();
 
-	private List<TableWorker> copiers = new ArrayList<>();
+	private List<AbstractTableWorker> copiers = new ArrayList<>();
 
 	private List<TablePreparer> copyPreparers = new ArrayList<>();
 
@@ -55,22 +58,50 @@ public class DataCopier
 	{
 		if (config.getDataConvertMode() == ConvertMode.DropAndRecreate)
 		{
-
-			createTableDeleters();
-			ConversionResult prepare = runWorkers(deletePreparers);
-			log.info("Preparing delete finished with result: " + prepare.toString());
-			ConversionResult run = runWorkers(deleters);
-			log.info("Running delete finished with result: " + run.toString());
+			try (Connection source = DriverManager.getConnection(config.getUrlSource());
+					Connection destination = DriverManager.getConnection(config.getUrlDestination()))
+			{
+				createTableDeleters(source, destination);
+				ConversionResult prepare = runWorkers(deletePreparers);
+				log.info("Preparing delete finished with result: " + prepare.toString());
+				ConversionResult run = runWorkers(deleters);
+				log.info("Running delete finished with result: " + run.toString());
+			}
 		}
 	}
 
 	private void copyData() throws SQLException
 	{
-		createTableWorkers();
-		ConversionResult prepare = runWorkers(copyPreparers);
-		log.info("Preparing copy finished with result: " + prepare.toString());
-		ConversionResult run = runWorkers(copiers);
-		log.info("Running copy finished with result: " + run.toString());
+		try (Connection source = DriverManager.getConnection(config.getUrlSource());
+				Connection destination = DriverManager.getConnection(config.getUrlDestination()))
+		{
+			prepareSourceConnection(source);
+			createTableWorkers(source, destination);
+			ConversionResult prepare = runWorkers(copyPreparers);
+			log.info("Preparing copy finished with result: " + prepare.toString());
+			ConversionResult run = runWorkers(copiers);
+			log.info("Running copy finished with result: " + run.toString());
+		}
+	}
+
+	private void prepareSourceConnection(Connection source) throws SQLException
+	{
+		if (source.isWrapperFor(ICloudSpannerConnection.class))
+		{
+			ICloudSpannerConnection con = source.unwrap(ICloudSpannerConnection.class);
+			if (!con.isBatchReadOnly())
+			{
+				if (con.getAutoCommit())
+				{
+					con.setAutoCommit(false);
+				}
+				else
+				{
+					con.commit();
+				}
+				con.setBatchReadOnly(true);
+			}
+		}
 	}
 
 	private void initTables() throws SQLException
@@ -92,24 +123,31 @@ public class DataCopier
 		}
 	}
 
-	private void createTableDeleters()
+	private void createTableDeleters(Connection source, Connection destination) throws SQLException
 	{
 		for (String table : tables)
 		{
 			TableDeleter worker = new TableDeleter(table, config);
 			deleters.add(worker);
-			deletePreparers.add(new TablePreparer(config, worker));
+			deletePreparers.add(new TablePreparer(worker, source, destination));
 		}
 	}
 
-	private void createTableWorkers()
+	private void createTableWorkers(Connection source, Connection destination) throws SQLException
 	{
 		for (String table : tables)
 		{
-			TableWorker worker = new TableWorker(table, config);
+			AbstractTableWorker worker = createTableWorker(table, config);
 			copiers.add(worker);
-			copyPreparers.add(new TablePreparer(config, worker));
+			copyPreparers.add(new TablePreparer(worker, source, destination));
 		}
+	}
+
+	private AbstractTableWorker createTableWorker(String table, ConverterConfiguration config)
+	{
+		if (config.getSourceDatabaseType() == DatabaseType.CloudSpanner)
+			return new CloudSpannerTableWorker(table, config);
+		return new GenericJdbcTableWorker(table, config);
 	}
 
 	private ConversionResult runWorkers(List<? extends Callable<ConversionResult>> callables)

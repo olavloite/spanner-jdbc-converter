@@ -8,7 +8,6 @@ import java.sql.SQLException;
 import java.util.logging.Logger;
 
 import nl.topicus.spanner.converter.cfg.ConverterConfiguration;
-import nl.topicus.spanner.converter.util.ConverterUtils;
 
 public class UploadWorker extends AbstractTablePartWorker
 {
@@ -16,31 +15,23 @@ public class UploadWorker extends AbstractTablePartWorker
 
 	private String selectFormat;
 
-	private String sourceTable;
-
-	private String destinationTable;
-
-	private Columns insertCols;
-
 	private Columns selectCols;
 
 	private long beginOffset;
 
 	private int batchSize;
 
-	private long byteCount;
+	private final long numberOfRecordsToCopy;
 
 	UploadWorker(String name, ConverterConfiguration config, String selectFormat, String sourceTable,
 			String destinationTable, Columns insertCols, Columns selectCols, long beginOffset,
 			long numberOfRecordsToCopy, int batchSize)
 	{
-		super(config, sourceTable, numberOfRecordsToCopy);
+		super(config, sourceTable, destinationTable, insertCols);
 		this.selectFormat = selectFormat;
-		this.sourceTable = sourceTable;
-		this.destinationTable = destinationTable;
-		this.insertCols = insertCols;
 		this.selectCols = selectCols;
 		this.beginOffset = beginOffset;
+		this.numberOfRecordsToCopy = numberOfRecordsToCopy;
 		this.batchSize = batchSize;
 	}
 
@@ -50,17 +41,12 @@ public class UploadWorker extends AbstractTablePartWorker
 		try (Connection destination = DriverManager.getConnection(config.getUrlDestination());
 				Connection source = DriverManager.getConnection(config.getUrlSource()))
 		{
-			ConverterUtils converterUtils = new ConverterUtils(config);
-			log.fine(sourceTable + ": Starting copying " + totalRecordCount + " records");
-
+			log.fine(sourceTable + ": Starting copying " + numberOfRecordsToCopy + " records");
 			destination.setAutoCommit(false);
-			String sql = "INSERT INTO " + destinationTable + " (" + insertCols.getColumnNames() + ") VALUES \n";
-			sql = sql + "(" + insertCols.getColumnParameters() + ")";
-			PreparedStatement statement = destination.prepareStatement(sql);
 
-			long lastRecord = beginOffset + totalRecordCount;
-			long recordCount = 0;
+			long lastRecord = beginOffset + numberOfRecordsToCopy;
 			long currentOffset = beginOffset;
+			PreparedStatement insertStatement = createInsertStatement(destination);
 			while (true)
 			{
 				long limit = Math.min(batchSize, lastRecord - currentOffset);
@@ -71,39 +57,16 @@ public class UploadWorker extends AbstractTablePartWorker
 				select = select.replace("$OFFSET", String.valueOf(currentOffset));
 				try (ResultSet rs = source.createStatement().executeQuery(select))
 				{
-					while (rs.next())
-					{
-						int index = 1;
-						for (Integer type : insertCols.getColumnTypes())
-						{
-							Object object = rs.getObject(index);
-							statement.setObject(index, object, type);
-							byteCount += converterUtils.getActualDataSize(type, object);
-							index++;
-						}
-						if (config.isUseJdbcBatching())
-							statement.addBatch();
-						else
-							statement.executeUpdate();
-						recordCount++;
-					}
-					if (config.isUseJdbcBatching())
-						statement.executeBatch();
+					copyResultSet(rs, insertStatement);
 				}
 				destination.commit();
-				log.fine(sourceTable + ": Records copied so far: " + recordCount + " of " + totalRecordCount);
+				log.fine(sourceTable + ": Records copied so far: " + getRecordCount() + " of " + numberOfRecordsToCopy);
 				currentOffset = currentOffset + batchSize;
-				if (recordCount >= totalRecordCount)
+				if (getRecordCount() >= numberOfRecordsToCopy)
 					break;
 			}
 		}
-		log.fine(sourceTable + ": Finished copying");
-	}
-
-	@Override
-	protected long getByteCount()
-	{
-		return byteCount;
+		log.fine(sourceTable + ": Finished copying " + getRecordCount() + " records");
 	}
 
 }

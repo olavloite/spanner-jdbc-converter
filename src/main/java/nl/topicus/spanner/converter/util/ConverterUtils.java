@@ -7,7 +7,8 @@ import java.sql.Types;
 import java.util.AbstractList;
 import java.util.List;
 
-import nl.topicus.jdbc.shaded.com.google.cloud.ByteArray;
+import com.google.cloud.ByteArray;
+
 import nl.topicus.spanner.converter.cfg.ConverterConfiguration;
 import nl.topicus.spanner.converter.cfg.ConverterConfiguration.DatabaseType;
 import nl.topicus.spanner.converter.data.Columns;
@@ -174,7 +175,8 @@ public class ConverterUtils
 				// table, Cloud Spanner will misinterpret the query. In those
 				// cases, the column name will be prefixed by the table name
 				res.addColumn(forSelect && columns.getString("COLUMN_NAME").equalsIgnoreCase(table)
-						? table + "." + columns.getString("COLUMN_NAME") : columns.getString("COLUMN_NAME"));
+						? table + "." + columns.getString("COLUMN_NAME")
+						: columns.getString("COLUMN_NAME"));
 				res.addColumnType(columns.getInt("DATA_TYPE"));
 			}
 		}

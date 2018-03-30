@@ -9,13 +9,13 @@ import java.util.logging.Logger;
 
 import nl.topicus.spanner.converter.cfg.ConverterConfiguration;
 
-public class TableWorker extends AbstractTableWorker
+public class GenericJdbcTableWorker extends AbstractTableWorker
 {
-	private static final Logger log = Logger.getLogger(TableWorker.class.getName());
+	private static final Logger log = Logger.getLogger(GenericJdbcTableWorker.class.getName());
 
 	private long totalRecordCount;
 
-	TableWorker(String table, ConverterConfiguration config)
+	GenericJdbcTableWorker(String table, ConverterConfiguration config)
 	{
 		super(table, config);
 	}

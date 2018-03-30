@@ -31,7 +31,7 @@ public class DeleteWorker extends AbstractTablePartWorker
 	DeleteWorker(ConverterConfiguration config, String table, Columns columns, List<Object> beginKey,
 			List<Object> endKey, long numberOfRecordsToDelete, int batchSize)
 	{
-		super(config, table, numberOfRecordsToDelete);
+		super(config, table);
 		this.columns = columns;
 		this.beginKey = beginKey;
 		this.endKey = endKey;
@@ -45,12 +45,12 @@ public class DeleteWorker extends AbstractTablePartWorker
 		try (Connection destination = DriverManager.getConnection(config.getUrlDestination());
 				Connection selectConnection = DriverManager.getConnection(config.getUrlDestination()))
 		{
-			log.fine(table + ": Starting deleting " + numberOfRecordsToDelete + " records");
+			log.fine(sourceTable + ": Starting deleting " + numberOfRecordsToDelete + " records");
 			selectConnection.setReadOnly(true);
 			destination.setAutoCommit(false);
 
 			boolean first = true;
-			String sql = "DELETE FROM " + table + " WHERE ";
+			String sql = "DELETE FROM " + sourceTable + " WHERE ";
 			for (String col : columns.getPrimaryKeyCols())
 			{
 				if (!first)
@@ -61,9 +61,9 @@ public class DeleteWorker extends AbstractTablePartWorker
 			PreparedStatement statement = destination.prepareStatement(sql);
 
 			int limit = batchSize;
-			String select = selectFormat.replace("$COLUMNS", columns.getPrimaryKeyColumns(table + "."));
-			select = select.replace("$TABLE", table);
-			select = select.replace("$WHERE_CLAUSE", columns.getPrimaryKeyColumnsWhereClause(table + "."));
+			String select = selectFormat.replace("$COLUMNS", columns.getPrimaryKeyColumns(sourceTable + "."));
+			select = select.replace("$TABLE", sourceTable);
+			select = select.replace("$WHERE_CLAUSE", columns.getPrimaryKeyColumnsWhereClause(sourceTable + "."));
 			select = select.replace("$PRIMARY_KEY", columns.getPrimaryKeyColumns());
 			select = select.replace("$BATCH_SIZE", String.valueOf(limit));
 			PreparedStatement selectStatement = selectConnection.prepareStatement(select);
@@ -104,16 +104,17 @@ public class DeleteWorker extends AbstractTablePartWorker
 						statement.executeBatch();
 				}
 				destination.commit();
-				log.fine(table + ": Records deleted so far: " + recordCount + " of " + numberOfRecordsToDelete);
+				log.fine(sourceTable + ": Records deleted so far: " + recordCount + " of " + numberOfRecordsToDelete);
 				if (recordCount >= numberOfRecordsToDelete || !recordsFound)
 					break;
 			}
 			this.recordCount = recordCount;
 			selectConnection.commit();
 		}
-		log.fine(table + ": Finished deleting");
+		log.fine(sourceTable + ": Finished deleting");
 	}
 
+	@Override
 	public long getRecordCount()
 	{
 		return recordCount;

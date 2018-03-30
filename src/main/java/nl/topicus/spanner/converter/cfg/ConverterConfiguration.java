@@ -109,6 +109,8 @@ public class ConverterConfiguration
 
 	private Boolean useJdbcBatching;
 
+	private Integer maxStatementsInOneJdbcBatch;
+
 	private final String urlSource;
 
 	private final String urlDestination;
@@ -229,6 +231,16 @@ public class ConverterConfiguration
 			useJdbcBatching = Boolean.valueOf(properties.getProperty("DataConverter.useJdbcBatching", "true"));
 		}
 		return useJdbcBatching.booleanValue();
+	}
+
+	public Integer getMaxStatementsInOneJdbcBatch()
+	{
+		if (maxStatementsInOneJdbcBatch == null)
+		{
+			maxStatementsInOneJdbcBatch = Integer
+					.valueOf(properties.getProperty("DataConverter.maxStatementsInOneJdbcBatch", "10000"));
+		}
+		return maxStatementsInOneJdbcBatch;
 	}
 
 	public String getCatalog()

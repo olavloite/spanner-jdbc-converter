@@ -41,19 +41,12 @@
 		<dependency>
 			<groupId>nl.topicus</groupId>
 			<artifactId>spanner-jdbc</artifactId>
-			<version>0.19</version>
-			<classifier>shaded</classifier>
+			<version>0.27-SNAPSHOT</version>
 		</dependency>
 		<dependency>
-			<groupId>nl.topicus</groupId>
-			<artifactId>spanner-jdbc</artifactId>
-			<version>0.19</version>
-			<classifier>shaded-sources</classifier>
-		</dependency>
-		<dependency>
-			<groupId>postgresql</groupId>
+			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
-			<version>9.4.1208-jdbc42-atlassian-hosted</version>
+			<version>42.2.2</version>
 		</dependency>
 	</dependencies>
 
