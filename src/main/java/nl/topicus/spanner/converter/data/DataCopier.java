@@ -89,6 +89,7 @@ public class DataCopier
 		if (source.isWrapperFor(ICloudSpannerConnection.class))
 		{
 			ICloudSpannerConnection con = source.unwrap(ICloudSpannerConnection.class);
+			// Make sure no transaction is running
 			if (!con.isBatchReadOnly())
 			{
 				if (con.getAutoCommit())
