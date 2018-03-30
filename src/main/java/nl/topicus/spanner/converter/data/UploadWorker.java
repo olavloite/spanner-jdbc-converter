@@ -59,12 +59,22 @@ public class UploadWorker extends AbstractTablePartWorker
 				{
 					copyResultSet(rs, insertStatement);
 				}
+				catch (SQLException e)
+				{
+					setException(e);
+					throw e;
+				}
 				destination.commit();
-				log.fine(sourceTable + ": Records copied so far: " + getRecordCount() + " of " + numberOfRecordsToCopy);
+				log.info(sourceTable + ": Records copied so far: " + getRecordCount() + " of " + numberOfRecordsToCopy);
 				currentOffset = currentOffset + batchSize;
 				if (getRecordCount() >= numberOfRecordsToCopy)
 					break;
 			}
+		}
+		catch (SQLException e)
+		{
+			setException(e);
+			throw e;
 		}
 		log.fine(sourceTable + ": Finished copying " + getRecordCount() + " records");
 	}

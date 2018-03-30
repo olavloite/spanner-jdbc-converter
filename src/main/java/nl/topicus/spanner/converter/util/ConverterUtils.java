@@ -190,14 +190,14 @@ public class ConverterUtils
 		return res;
 	}
 
-	public int getSourceRecordCount(Connection source, String tableSpec) throws SQLException
+	public long getSourceRecordCount(Connection source, String tableSpec) throws SQLException
 	{
 		try (ResultSet count = source.createStatement().executeQuery("SELECT COUNT(*) FROM " + tableSpec))
 		{
 			if (count.next())
-				return count.getInt(1);
+				return count.getLong(1);
 		}
-		return 0;
+		return 0l;
 	}
 
 	public long getDestinationRecordCount(Connection destination, String table) throws SQLException

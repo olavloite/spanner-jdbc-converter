@@ -28,6 +28,8 @@ public abstract class AbstractTablePartWorker implements Callable<ConversionResu
 
 	private long actualRecordCount;
 
+	private Exception exception;
+
 	AbstractTablePartWorker(ConverterConfiguration config, String sourceTable)
 	{
 		this(config, sourceTable, null, null);
@@ -88,7 +90,7 @@ public abstract class AbstractTablePartWorker implements Callable<ConversionResu
 				insertStatement.executeUpdate();
 			}
 			actualRecordCount++;
-			if (actualRecordCount % config.getMaxStatementsInOneJdbcBatch() == 0)
+			if (config.isUseJdbcBatching() && actualRecordCount % config.getMaxStatementsInOneJdbcBatch() == 0)
 			{
 				insertStatement.executeBatch();
 				log.info(toString() + " - Current record count for " + sourceTable + ": " + actualRecordCount);
@@ -110,6 +112,16 @@ public abstract class AbstractTablePartWorker implements Callable<ConversionResu
 	protected long getRecordCount()
 	{
 		return actualRecordCount;
+	}
+
+	Exception getException()
+	{
+		return exception;
+	}
+
+	void setException(Exception exception)
+	{
+		this.exception = exception;
 	}
 
 }

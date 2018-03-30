@@ -114,11 +114,24 @@ public class DataCopier
 				while (rs.next())
 				{
 					String tableSchema = rs.getString("TABLE_SCHEM");
-					if (!config.getDestinationDatabaseType().isSystemSchema(tableSchema))
+					if (!config.getDestinationDatabaseType().isSystemSchema(tableSchema)
+							&& tableExistsInSource(rs.getString("TABLE_NAME")))
 					{
 						tables.add(rs.getString("TABLE_NAME"));
 					}
 				}
+			}
+		}
+	}
+
+	private boolean tableExistsInSource(String table) throws SQLException
+	{
+		try (Connection source = DriverManager.getConnection(config.getUrlSource()))
+		{
+			try (ResultSet rs = source.getMetaData().getTables(config.getCatalog(), config.getSchema(), table,
+					new String[] { "TABLE" }))
+			{
+				return rs.next();
 			}
 		}
 	}
