@@ -1,10 +1,11 @@
-# spanner-jdbc-converter
+# DEPRECATED
+This project is no longer actively maintained.
+
+It is recommended that you use the [officially supported open source JDBC driver for Google Cloud Spanner](https://github.com/googleapis/java-spanner-jdbc) in combination with the [corresponding Hibernate dialect](https://github.com/GoogleCloudPlatform/google-cloud-spanner-hibernate).
+
+## spanner-jdbc-converter
 A generic tool for converting JDBC-compliant databases to Google Cloud Spanner and vice-versa. The converter will convert both your data model and data to Google Cloud Spanner. It has currently only been tested with PostgreSQL source databases.
 It can also convert databases in the other direction, i.e. download a Google Cloud Spanner database into a PostgreSQL database. This way you can create a local backup of your Google Cloud Spanner database.
-
-This project uses an open source JDBC driver for Google Cloud Spanner: https://github.com/olavloite/spanner-jdbc
-
-A short tutorial on this project can be found here: http://cloudspanner.blogspot.nl/2017/09/bulk-upload-in-google-cloud-spanner.html
 
 ## How it works
 The tool does the conversion in these stages:<br>
